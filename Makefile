@@ -8,12 +8,15 @@ HAND_MODEL_URL := https://storage.googleapis.com/mediapipe-models/hand_landmarke
 E2L := uv run e2l
 
 .PHONY: setup lint format test models gpu smoke normalise perception segment retarget sim-check \
-	generate export finetune baseline eval report
+	worktree generate export finetune baseline eval report
 
 ## Environment ------------------------------------------------------------------------------
 setup:            ## install every group (laptop); Spark: uv sync --group train --group dev
 	uv sync --all-groups
 	uv run pre-commit install
+
+worktree:         ## inside a linked worktree: own venv, shared data/ and models/, tests
+	bash scripts/worktree_setup.sh
 
 models: models/hand_landmarker.task
 
