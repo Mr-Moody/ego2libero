@@ -27,14 +27,25 @@ def check(
 def replay(
     demo_id: str,
     config: Path = config_option("sim"),
+    episode_index: int = typer.Option(0, help="LIBERO init state giving the object poses."),
+    video: bool = typer.Option(False, help="Also write outputs/replay/<demo_id>.mp4."),
     set_: list[str] = set_option(),
 ) -> None:
     """Replay data/robot_segments/<demo_id> once at the nominal object poses."""
+    import numpy as np
+
     from e2l_common.paths import DataPaths
     from e2l_common.schemas import RobotSegments
+    from e2l_sim.render import save_video, upright
     from e2l_sim.replay import replay as replay_segments
 
     cfg = load_stage_config(config, set_, SimConfig)
     paths = DataPaths.default()
-    episode = replay_segments(RobotSegments.load(paths.robot_segments(demo_id)), cfg)
-    episode.save(paths.generated("replay", demo_id))
+    segments = RobotSegments.load(paths.robot_segments(demo_id))
+    episode = replay_segments(segments, cfg, episode_index=episode_index)
+    npz, _ = episode.save(paths.generated("replay", demo_id))
+    typer.echo(f"{demo_id}: success={episode.success}, {len(episode.actions)} steps -> {npz}")
+    if video:
+        frames = np.concatenate([upright(v) for v in episode.images.values()], axis=2)
+        out = save_video(frames, Path("outputs/replay") / f"{demo_id}.mp4", cfg.control_freq)
+        typer.echo(f"wrote {out}")

@@ -16,6 +16,8 @@ one pydantic model each in `e2l_common.config`; override with `--set key.sub=val
 - `make lint` · `make test` · `make models` (MediaPipe hand_landmarker.task) · `make smoke`
 - `uv run e2l --help`, `uv run e2l info` (installed stages + CUDA)
 - `uv run e2l sim check` · `uv run e2l eval baseline` · `uv run e2l train finetune --dry-run`
+- Replay check without perception: `uv run python scripts/scripted_segments.py`, then
+  `uv run e2l sim replay 20261003_scripted_000 --video` (should print `success=True`)
 - `uv run python scripts/make_markers.py` · `uv run python scripts/calibrate_phone.py <video>`
 
 ## Conventions (enforced by tests)

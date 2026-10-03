@@ -111,6 +111,11 @@ class SimConfig(_Config):
     max_steps: int = 300
     seed: int = 0
     T_sim_table: Pose = Pose()
+    object_map: dict[str, str] = Field(default_factory=dict)  # real object name -> LIBERO name
+    transit_speed: float = 0.25  # m/s, free-space moves into each segment's first pose
+    gripper_settle_steps: int = 10  # control steps held at each grasp / release
+    max_steps_per_target: int = 3  # extra tracking steps while the grip site lags its target
+    tracking_gain: float = 3.0  # pose error -> action gain (OSC lags a single delta)
 
 
 class GenerateConfig(_Config):

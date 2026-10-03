@@ -2,11 +2,18 @@
 
 from pathlib import Path
 
+import imageio.v3 as iio
 import numpy as np
 
-from e2l_common.stub import not_implemented
+
+def upright(frames: np.ndarray) -> np.ndarray:
+    """LIBERO renders upside down; flip H and W for viewing only (policies see raw images)."""
+    return np.ascontiguousarray(np.asarray(frames)[..., ::-1, ::-1, :])
 
 
 def save_video(frames: np.ndarray, path: Path, fps: int = 20) -> Path:
     """Write frames (T,H,W,3) uint8 RGB to an mp4."""
-    not_implemented("e2l_sim.render.save_video")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    iio.imwrite(path, np.asarray(frames, dtype=np.uint8), fps=fps, codec="libx264")
+    return path
