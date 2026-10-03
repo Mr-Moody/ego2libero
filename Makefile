@@ -36,7 +36,7 @@ test:
 gpu:              ## fails unless torch sees a CUDA device
 	uv run python -c "import torch; assert torch.cuda.is_available(), \"no CUDA\"; print(torch.__version__, torch.cuda.get_device_name(0))"
 
-smoke: lint test gpu
+smoke: lint test gpu sim-check baseline  ## full toolchain check from a fresh clone
 
 ## Stages (DEMO=<demo_id>, RUN=<run_id>) ----------------------------------------------------
 normalise:
