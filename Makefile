@@ -1,4 +1,6 @@
 SHELL := /bin/bash
+# ROS Humble (sourced in ~/.zshrc) puts python3.10 site-packages on PYTHONPATH; keep it out.
+unexport PYTHONPATH
 export MUJOCO_GL ?= egl
 export PYOPENGL_PLATFORM ?= egl
 
