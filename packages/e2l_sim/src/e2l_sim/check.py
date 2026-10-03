@@ -9,6 +9,8 @@ from rich.tree import Tree
 
 from e2l_common.config import SimConfig
 from e2l_sim.env import make_env
+from e2l_sim.render import upright
+from e2l_sim.scene import object_poses
 
 
 def _spec_tree(tree: Tree, value) -> None:
@@ -18,15 +20,6 @@ def _spec_tree(tree: Tree, value) -> None:
         else:
             arr = np.asarray(sub)
             tree.add(f"{key}: {arr.dtype} {arr.shape}")
-
-
-def object_positions(env) -> dict[str, np.ndarray]:
-    """World positions of the task's movable objects (LIBERO sim frame, metres)."""
-    inner = env._env.env  # LiberoEnv -> OffScreenRenderEnv -> LIBERO problem env
-    return {
-        name: inner.sim.data.body_xpos[inner.obj_body_id[name]].copy()
-        for name in getattr(inner, "objects_dict", {})
-    }
 
 
 def run_check(cfg: SimConfig, steps: int, out_dir: Path) -> None:
@@ -48,9 +41,8 @@ def run_check(cfg: SimConfig, steps: int, out_dir: Path) -> None:
 
         out_dir.mkdir(parents=True, exist_ok=True)
         for cam, img in obs["pixels"].items():
-            # LIBERO renders upside down; flip for viewing only (policies see the raw image).
             path = out_dir / f"{cam}.png"
-            iio.imwrite(path, np.ascontiguousarray(img[::-1, ::-1]))
+            iio.imwrite(path, upright(img))
             console.print(f"wrote {path}")
 
         tree = Tree("[bold]observation spec[/bold]")
@@ -61,8 +53,8 @@ def run_check(cfg: SimConfig, steps: int, out_dir: Path) -> None:
             f"low {low.tolist()}, high {high.tolist()}  "
             "(dpos xyz, drot axis-angle xyz, gripper -1 open / +1 closed)"
         )
-        for name, pos in object_positions(env).items():
-            console.print(f"object {name}: T_sim_obj translation {np.round(pos, 3).tolist()}")
+        for name, T in object_poses(env).items():
+            console.print(f"object {name}: T_sim_obj translation {np.round(T[:3, 3], 3).tolist()}")
         console.print(f"stepped {steps} random actions, success={success}")
     finally:
         env.close()

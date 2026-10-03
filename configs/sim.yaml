@@ -24,3 +24,12 @@ seed: 0
 # Pose of the real table frame in the LIBERO world frame. Placeholder: set so the table board
 # centre lands where the bowl/plate sit in the task's initial states.
 T_sim_table: {xyz: [0.0, 0.0, 0.9], rotvec: [0.0, 0.0, 0.0]}
+
+# Real object names (capture.yaml) -> LIBERO object names in this task.
+object_map: {bowl: akita_black_bowl_1, plate: plate_1}
+
+# Replay (`e2l sim replay`, `e2l generate run`).
+transit_speed: 0.25                      # m/s, free-space moves into each segment's first pose
+gripper_settle_steps: 10                 # steps held at each grasp / release so the fingers settle
+max_steps_per_target: 3                  # tracking steps per target while the grip site lags
+tracking_gain: 3.0                       # pose error -> action gain (OSC lags a single delta)

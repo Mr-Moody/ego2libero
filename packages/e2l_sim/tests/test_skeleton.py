@@ -7,4 +7,4 @@ def test_cli_help():
 
 
 def test_stubs_raise_named_not_implemented():
-    assert check_stubs("e2l_sim") > 0
+    check_stubs("e2l_sim")  # e2l_sim has no stubs left; keeps any new ones honest
