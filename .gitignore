@@ -1,0 +1,24 @@
+# Data and run artefacts (never committed)
+data/
+outputs/
+models/
+*.task
+*.mp4
+*.mov
+*.MOV
+*.avi
+*.mkv
+!docs/**/*.mp4
+!docs/**/*.gif
+
+# Python / tooling
+.venv
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+build/
+dist/
+wandb/
+.env

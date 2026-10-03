@@ -1,0 +1,19 @@
+[project]
+name = "e2l-common"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "numpy>=2.0,<2.3",
+    "scipy>=1.13",
+    "pydantic>=2.7",
+    "pyyaml>=6",
+    "typer>=0.12",
+    "rich>=13",
+]
+
+[project.scripts]
+e2l = "e2l_common.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

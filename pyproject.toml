@@ -1,0 +1,82 @@
+[project]
+name = "ego2libero"
+version = "0.1.0"
+description = "Phone videos of human pick-and-place, multiplied into LIBERO training data for SmolVLA."
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = ["e2l-common"]
+
+[dependency-groups]
+dev = ["ruff>=0.6", "pytest>=8", "pre-commit>=3.7"]
+perception = ["e2l-perception", "e2l-segment"]
+sim = ["e2l-sim", "e2l-retarget", "e2l-generate", "e2l-eval"]
+train = ["e2l-train"]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
+# Only Linux machines run this project: x86_64 laptop/desktop and the aarch64 DGX Spark.
+environments = [
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+]
+# mediapipe needs opencv-contrib-python; lerobot, hf-libero and robosuite pull other cv2
+# wheels that overwrite it. The never-true marker drops them; contrib provides all of cv2.
+override-dependencies = [
+    "opencv-python; sys_platform == 'never'",
+    "opencv-python-headless; sys_platform == 'never'",
+]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+e2l-common = { workspace = true }
+e2l-perception = { workspace = true }
+e2l-segment = { workspace = true }
+e2l-retarget = { workspace = true }
+e2l-sim = { workspace = true }
+e2l-generate = { workspace = true }
+e2l-train = { workspace = true }
+e2l-eval = { workspace = true }
+torch = [
+    { index = "pytorch-cu128", marker = "platform_machine == 'x86_64'" },
+    { index = "pytorch-cu130", marker = "platform_machine == 'aarch64'" },
+]
+torchvision = [
+    { index = "pytorch-cu128", marker = "platform_machine == 'x86_64'" },
+    { index = "pytorch-cu130", marker = "platform_machine == 'aarch64'" },
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["data", "outputs", "models"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]
+# N806/N803 not selected: T_a_b and K-style maths names are the project convention.
+
+[tool.ruff.lint.isort]
+known-first-party = [
+    "e2l_common", "e2l_perception", "e2l_segment", "e2l_retarget",
+    "e2l_sim", "e2l_generate", "e2l_train", "e2l_eval",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages"]
+addopts = "--import-mode=importlib -ra"
+markers = [
+    "sim: needs LIBERO / MuJoCo (sim group)",
+    "slow: takes more than a few seconds",
+]

@@ -1,0 +1,19 @@
+[project]
+name = "e2l-perception"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "e2l-common",
+    "mediapipe>=0.10.14",
+    "opencv-contrib-python>=4.10,<5",
+    "matplotlib>=3.8",
+    "imageio>=2.34",
+    "imageio-ffmpeg>=0.5",
+]
+
+[tool.uv.sources]
+e2l-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

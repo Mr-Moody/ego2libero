@@ -1,0 +1,16 @@
+[project]
+name = "e2l-generate"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "e2l-common",
+    "e2l-sim",
+]
+
+[tool.uv.sources]
+e2l-common = { workspace = true }
+e2l-sim = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

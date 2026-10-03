@@ -1,0 +1,21 @@
+[project]
+name = "e2l-eval"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "e2l-common",
+    "e2l-sim",
+    "e2l-train",
+    "matplotlib>=3.8",
+    "imageio>=2.34",
+    "imageio-ffmpeg>=0.5",
+]
+
+[tool.uv.sources]
+e2l-common = { workspace = true }
+e2l-sim = { workspace = true }
+e2l-train = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

@@ -1,0 +1,18 @@
+[project]
+name = "e2l-train"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "e2l-common",
+    "lerobot[smolvla]>=0.4",
+    "torch>=2.7",
+    "torchvision>=0.22",
+    "opencv-contrib-python>=4.10,<5",
+]
+
+[tool.uv.sources]
+e2l-common = { workspace = true }
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
