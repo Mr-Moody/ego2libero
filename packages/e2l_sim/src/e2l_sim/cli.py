@@ -1,0 +1,40 @@
+"""`e2l sim ...`: LIBERO checks and replay."""
+
+from pathlib import Path
+
+import typer
+
+from e2l_common.cliutils import config_option, load_stage_config, set_option
+from e2l_common.config import SimConfig
+
+app = typer.Typer(help="LIBERO environment, replay and rendering.", no_args_is_help=True)
+
+
+@app.command()
+def check(
+    config: Path = config_option("sim"),
+    steps: int = typer.Option(50, help="Random actions to step."),
+    out_dir: Path = typer.Option(Path("outputs/sim_check")),
+    set_: list[str] = set_option(),
+) -> None:
+    """Create the task, step random actions, save one PNG per camera, print specs."""
+    from e2l_sim.check import run_check
+
+    run_check(load_stage_config(config, set_, SimConfig), steps, out_dir)
+
+
+@app.command()
+def replay(
+    demo_id: str,
+    config: Path = config_option("sim"),
+    set_: list[str] = set_option(),
+) -> None:
+    """Replay data/robot_segments/<demo_id> once at the nominal object poses."""
+    from e2l_common.paths import DataPaths
+    from e2l_common.schemas import RobotSegments
+    from e2l_sim.replay import replay as replay_segments
+
+    cfg = load_stage_config(config, set_, SimConfig)
+    paths = DataPaths.default()
+    episode = replay_segments(RobotSegments.load(paths.robot_segments(demo_id)), cfg)
+    episode.save(paths.generated("replay", demo_id))

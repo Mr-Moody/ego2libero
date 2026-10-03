@@ -3,6 +3,7 @@
 import importlib
 
 import typer
+from rich.console import Console
 
 STAGES = ("perception", "segment", "retarget", "sim", "generate", "train", "eval")
 
@@ -32,7 +33,6 @@ def info() -> None:
     """Show which stage packages are installed on this machine."""
     from importlib.metadata import PackageNotFoundError, version
 
-    from rich.console import Console
     from rich.table import Table
 
     table = Table("package", "version")
@@ -62,4 +62,8 @@ _mount_stages()
 
 
 def main() -> None:
-    app()
+    try:
+        app()
+    except NotImplementedError as exc:
+        Console(stderr=True).print(f"[red]NotImplementedError:[/red] {exc}")
+        raise SystemExit(2) from None

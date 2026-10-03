@@ -67,6 +67,12 @@ extend-exclude = ["data", "outputs", "models"]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "NPY"]
 # N806/N803 not selected: T_a_b and K-style maths names are the project convention.
 
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "typer.Argument", "typer.Option",
+    "e2l_common.cliutils.config_option", "e2l_common.cliutils.set_option",
+]
+
 [tool.ruff.lint.isort]
 known-first-party = [
     "e2l_common", "e2l_perception", "e2l_segment", "e2l_retarget",
