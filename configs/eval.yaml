@@ -1,0 +1,9 @@
+# Policy evaluation and ablations.
+
+policy_path: HuggingFaceVLA/smolvla_libero   # checkpoint dir or hub id
+n_episodes: 50                               # per evaluated policy
+seed: 1000                                   # episode i uses seed + i
+output_dir: outputs/eval
+device: cuda
+demo_counts: [5, 10, 20, 40]                 # number of human demos in the ablation sweep
+augmentation: [false, true]                  # without / with demo multiplication

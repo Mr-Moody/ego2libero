@@ -1,0 +1,26 @@
+# LIBERO simulator settings.
+#
+# LIBERO-Goal tasks (task_id | name):
+#   0 open_the_middle_drawer_of_the_cabinet
+#   1 put_the_bowl_on_the_stove
+#   2 put_the_wine_bottle_on_top_of_the_cabinet
+#   3 open_the_top_drawer_and_put_the_bowl_inside
+#   4 put_the_bowl_on_top_of_the_cabinet
+#   5 push_the_plate_to_the_front_of_the_stove
+#   6 put_the_cream_cheese_in_the_bowl
+#   7 turn_on_the_stove
+#   8 put_the_bowl_on_the_plate             <- chosen: matches the bowl-onto-plate real demos
+#   9 put_the_wine_bottle_on_the_rack
+
+suite: libero_goal
+task_id: 8
+task_name: put_the_bowl_on_the_plate     # checked against the suite at env creation
+camera_names: [agentview, robot0_eye_in_hand]
+image_size: 256                          # square renders, as in the HuggingFaceVLA/libero data
+control_freq: 20                         # Hz
+max_steps: 300                           # episode limit (LIBERO-Goal evaluation default)
+seed: 0
+
+# Pose of the real table frame in the LIBERO world frame. Placeholder: set so the table board
+# centre lands where the bowl/plate sit in the task's initial states.
+T_sim_table: {xyz: [0.0, 0.0, 0.9], rotvec: [0.0, 0.0, 0.0]}

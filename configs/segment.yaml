@@ -1,0 +1,5 @@
+# DemoTrajectory -> HandSegments. Aperture is thumb-tip to index-tip distance in metres.
+
+close_threshold: 0.035                   # grip closes when aperture drops below this
+open_threshold: 0.055                    # and reopens only above this (hysteresis)
+min_dwell_s: 0.25                        # ignore grip changes shorter than this

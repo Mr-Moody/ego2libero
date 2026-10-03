@@ -1,0 +1,12 @@
+# SmolVLA fine-tuning through `lerobot-train`.
+
+policy_path: HuggingFaceVLA/smolvla_libero   # alternative: lerobot/smolvla_base
+dataset_repo_id: local/ego2libero
+dataset_root: data/lerobot/ego2libero        # written by `e2l train export`
+output_dir: outputs/train/smolvla
+steps: 20000
+batch_size: 32
+num_workers: 4
+save_freq: 5000
+wandb: false
+extra_args: []                               # appended verbatim, e.g. ["--policy.device=cuda"]

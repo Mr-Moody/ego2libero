@@ -1,0 +1,26 @@
+# Capture setup: phone intrinsics, ArUco dictionary, table board and tagged objects.
+# Physical sizes are what the printed PDF from scripts/make_markers.py measures (metres).
+
+intrinsics: data/calib/phone.json        # written by scripts/calibrate_phone.py
+aruco_dictionary: DICT_4X4_50            # any cv2.aruco predefined dictionary name
+
+# GridBoard taped flat to the table. Its centre is the `table` frame origin, z up,
+# x along the markers_x direction, y along markers_y.
+table_board:
+  markers_x: 4
+  markers_y: 3
+  marker_length: 0.04                    # printed marker side, m
+  marker_separation: 0.01                # gap between markers, m
+  first_id: 0                            # board uses ids first_id .. first_id + 11
+
+# One marker per object. T_marker_obj places the object's canonical frame in the marker frame
+# (translation m + rotation vector rad); measure it once per object.
+objects:
+  bowl:
+    marker_id: 20
+    marker_length: 0.03
+    T_marker_obj: {xyz: [0.0, 0.0, 0.0], rotvec: [0.0, 0.0, 0.0]}
+  plate:
+    marker_id: 21
+    marker_length: 0.03
+    T_marker_obj: {xyz: [0.0, 0.0, 0.0], rotvec: [0.0, 0.0, 0.0]}

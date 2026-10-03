@@ -1,0 +1,9 @@
+# HandSegments -> RobotSegments.
+
+# Wrist (palm frame origin) to Panda gripper centre, in the hand frame. Tune per grasp style.
+T_hand_ee: {xyz: [0.0, 0.0, 0.08], rotvec: [0.0, 0.0, 0.0]}
+canonicalise_top_down: true              # snap approach axis to straight down for top grasps
+workspace_min: [-0.4, -0.4, 0.0]         # table frame, m
+workspace_max: [0.4, 0.4, 0.5]
+max_linear_speed: 0.5                    # m/s
+max_angular_speed: 2.0                   # rad/s

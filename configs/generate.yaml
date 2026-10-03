@@ -1,0 +1,9 @@
+# MimicGen-style multiplication: RobotSegments -> SimEpisodes.
+
+episodes_per_demo: 50                    # attempts per source demo; only successes are kept
+xy_range: 0.08                           # object placement noise, +/- m around nominal
+yaw_range: 0.5                           # +/- rad about the sim z axis
+transit_steps: 30                        # interpolated steps between segments
+workers: 4                               # parallel replay processes
+keep_failures: false                     # store failed rollouts too (debugging only)
+seed: 0
