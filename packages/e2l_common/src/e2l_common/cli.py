@@ -42,6 +42,20 @@ def info() -> None:
         except PackageNotFoundError:
             table.add_row(f"e2l-{name}", "[dim]not installed[/dim]")
     Console().print(table)
+    Console().print(_torch_status())
+
+
+def _torch_status() -> str:
+    """Torch build and CUDA visibility; part of the per-machine smoke test."""
+    try:
+        import torch
+    except ModuleNotFoundError:
+        return "torch: not installed"
+    if not torch.cuda.is_available():
+        return f"torch {torch.__version__}: [red]CUDA not available[/red]"
+    return (
+        f"torch {torch.__version__}: CUDA {torch.version.cuda} on {torch.cuda.get_device_name(0)}"
+    )
 
 
 _mount_stages()

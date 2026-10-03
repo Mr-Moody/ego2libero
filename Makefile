@@ -5,7 +5,7 @@ export PYOPENGL_PLATFORM ?= egl
 HAND_MODEL_URL := https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task
 E2L := uv run e2l
 
-.PHONY: setup lint format test models smoke normalise perception segment retarget sim-check \
+.PHONY: setup lint format test models gpu smoke normalise perception segment retarget sim-check \
 	generate export finetune baseline eval report
 
 ## Environment ------------------------------------------------------------------------------
@@ -31,7 +31,10 @@ format:
 test:
 	uv run pytest
 
-smoke: lint test
+gpu:              ## fails unless torch sees a CUDA device
+	uv run python -c "import torch; assert torch.cuda.is_available(), \"no CUDA\"; print(torch.__version__, torch.cuda.get_device_name(0))"
+
+smoke: lint test gpu
 
 ## Stages (DEMO=<demo_id>, RUN=<run_id>) ----------------------------------------------------
 normalise:
