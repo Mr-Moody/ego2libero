@@ -31,6 +31,17 @@ one pydantic model each in `e2l_common.config`; override with `--set key.sub=val
   `e2l_common.schemas`. Unimplemented functions call `e2l_common.stub.not_implemented`.
 - Lean code and README; ruff (line 100) is the only linter; type hints expected.
 
+## Git and multi-agent work — read [CONTRIBUTING.md](CONTRIBUTING.md) before branching
+- Branches `<type>/<kebab-slug>`; commits `<type>(<scope>)?: <subject>`; types feat, fix,
+  refactor, perf, test, docs, build, ci, chore. Hooks reject anything else.
+- Never put agent, subagent, wave, phase, task, worker or model names, or bare numbers, in a
+  branch name or scope. Name branches from the change, before dispatching subagents.
+- Follow the superpowers chain: brainstorming → writing-plans → using-git-worktrees →
+  subagent-driven-development / dispatching-parallel-agents (+ test-driven-development) →
+  requesting-code-review → verification-before-completion → finishing-a-development-branch.
+- Worktrees: native tool or `.worktrees/<slug>`; rename `worktree-*` branches with
+  `git branch -m`; run `make worktree` inside it (own venv on /mnt/data, shared data/models).
+
 ## Environment gotchas (this laptop)
 - `~/.zshrc` sources ROS Humble, whose py3.10 `PYTHONPATH` breaks the venv: run
   `unset PYTHONPATH` before `uv run` (the Makefile already unexports it).

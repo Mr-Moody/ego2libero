@@ -2,6 +2,9 @@
 data/
 outputs/
 models/
+# symlinks to the main checkout inside worktrees (scripts/worktree_setup.sh)
+/data
+/models
 *.task
 *.mp4
 *.mov
@@ -23,3 +26,7 @@ dist/
 wandb/
 .env
 .libero/
+
+# Linked worktrees (CONTRIBUTING.md)
+.worktrees/
+.claude/worktrees/
