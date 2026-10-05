@@ -6,5 +6,5 @@ def test_cli_help():
     assert check_cli_help(app)
 
 
-def test_stubs_raise_named_not_implemented():
-    assert check_stubs("e2l_generate") > 0
+def test_no_stubs_remain():
+    assert check_stubs("e2l_generate") == 0
