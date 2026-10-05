@@ -1,6 +1,7 @@
 """Sample, replay and keep successes; record yield per source demo in a manifest."""
 
 import json
+import re
 import shutil
 import subprocess
 import zlib
@@ -22,6 +23,9 @@ from e2l_sim.replay import replay, sim_object
 from e2l_sim.scene import nominal_object_poses
 
 log = get_logger(__name__)
+# A single folder name under data/generated/: no separators, "." or "..", since --overwrite
+# deletes the folder.
+_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 # Per-process caches: each worker loads a demo and an init state's nominal poses only once.
 _segments_cache: dict[Path, RobotSegments] = {}
 _nominal_cache: dict[tuple[str, int], dict[str, np.ndarray]] = {}
@@ -124,7 +128,7 @@ def run_attempt(
     paths = DataPaths(data_root)
     stem = episode_stem(demo_id, k)
     index = k % n_init
-    base = {"stem": stem, "demo_id": demo_id, "attempt": k, "episode_index": index}
+    base = _base(demo_id, k, n_init)
     try:
         segments = _segments(paths.robot_segments(demo_id))
         names = {sim_object(seg.ref_object, sim_cfg) for seg in segments.segments}
@@ -141,7 +145,22 @@ def run_attempt(
         size_mb = (npz.stat().st_size + sidecar.stat().st_size) / 1e6
         return AttemptResult(**base, status=status, steps=steps, saved=True, size_mb=size_mb)
     except Exception as e:  # noqa: BLE001 - one bad attempt must not stop the run
-        return AttemptResult(**base, status="error", error=f"{type(e).__name__}: {e}")
+        return _error(demo_id, k, n_init, e)
+
+
+def _base(demo_id: str, k: int, n_init: int) -> dict:
+    return {
+        "stem": episode_stem(demo_id, k),
+        "demo_id": demo_id,
+        "attempt": k,
+        "episode_index": k % n_init,
+    }
+
+
+def _error(demo_id: str, k: int, n_init: int, e: BaseException) -> AttemptResult:
+    return AttemptResult(
+        **_base(demo_id, k, n_init), status="error", error=f"{type(e).__name__}: {e}"
+    )
 
 
 def _logged(r: AttemptResult) -> AttemptResult:
@@ -161,6 +180,8 @@ def generate(
     """For each source demo, run `cfg.episodes_per_demo` attempts (inline if cfg.workers <= 1,
     else in spawned worker processes) and save episodes to data/generated/<run_id>/. Writes
     manifest.json with yield per source demo and provenance; returns the manifest dict."""
+    if not _RUN_ID.match(run_id):
+        raise ValueError(f"bad run id {run_id!r}: use one folder name like run0 or scripted50")
     paths = DataPaths(Path(data_root))
     run_dir = paths.generated(run_id)
     missing = [d for d in demo_ids if not paths.robot_segments(d).with_suffix(".npz").exists()]
@@ -176,16 +197,25 @@ def generate(
 
     jobs = [(d, k) for d in demo_ids for k in range(cfg.episodes_per_demo)]
     results: list[AttemptResult] = []
-    if jobs:
-        args = (init_state_count(sim_cfg), run_id, cfg, sim_cfg, paths.root)
-        if cfg.workers <= 1:
-            results = [_logged(run_attempt(d, k, *args)) for d, k in jobs]
-        else:
-            # spawn, not fork: EGL rendering contexts do not survive a fork.
-            with ProcessPoolExecutor(cfg.workers, mp_context=get_context("spawn")) as pool:
-                futures = [pool.submit(run_attempt, d, k, *args) for d, k in jobs]
-                results = [_logged(f.result()) for f in as_completed(futures)]
-
-    manifest = summarise(results, run_id, cfg, sim_cfg)
-    paths.manifest(run_id).write_text(json.dumps(manifest, indent=2))
+    try:
+        if jobs:
+            n_init = init_state_count(sim_cfg)
+            args = (n_init, run_id, cfg, sim_cfg, paths.root)
+            if cfg.workers <= 1:
+                for d, k in jobs:
+                    results.append(_logged(run_attempt(d, k, *args)))
+            else:
+                # spawn, not fork: EGL rendering contexts do not survive a fork.
+                with ProcessPoolExecutor(cfg.workers, mp_context=get_context("spawn")) as pool:
+                    futures = {pool.submit(run_attempt, d, k, *args): (d, k) for d, k in jobs}
+                    for f in as_completed(futures):
+                        try:
+                            r = f.result()
+                        except Exception as e:  # noqa: BLE001 - e.g. the worker process died
+                            r = _error(*futures[f], n_init, e)
+                        results.append(_logged(r))
+    finally:
+        # Also on Ctrl-C: the manifest describes whatever episodes were saved.
+        manifest = summarise(results, run_id, cfg, sim_cfg)
+        paths.manifest(run_id).write_text(json.dumps(manifest, indent=2))
     return manifest

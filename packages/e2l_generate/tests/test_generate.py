@@ -146,3 +146,61 @@ def test_no_jobs_writes_empty_manifest(tmp_path, monkeypatch):
     monkeypatch.setattr(run, "init_state_count", no_libero)
     m = run.generate([], "r", cfg(), SIM, tmp_path)
     assert m["demos"] == {} and DataPaths(tmp_path).manifest("r").exists()
+
+
+class InlinePool:
+    """Stands in for ProcessPoolExecutor: runs jobs inline; attempt 1 'dies' with the pool and
+    attempt 2's result is interrupted, as a worker crash or Ctrl-C would."""
+
+    def __init__(self, *a, **kw):
+        pass
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def submit(self, fn, demo_id, k, *args):
+        from concurrent.futures import Future
+        from concurrent.futures.process import BrokenProcessPool
+
+        f = Future()
+        if k == 1:
+            f.set_exception(BrokenProcessPool("worker died"))
+        elif k == 2 and self.interrupt:
+            f.set_exception(KeyboardInterrupt())
+        else:
+            f.set_result(fn(demo_id, k, *args))
+        return f
+
+
+def test_dead_worker_is_an_attempt_error(tmp_path, fake_sim, monkeypatch):
+    write_demo(tmp_path)
+    monkeypatch.setattr(InlinePool, "interrupt", False, raising=False)
+    monkeypatch.setattr(run, "ProcessPoolExecutor", InlinePool)
+    m = run.generate([DEMO], "r", cfg(workers=2), SIM, tmp_path)
+    assert [e["status"] for e in m["episodes"]] == ["success", "error", "success", "success"]
+    assert m["episodes"][1]["error"] == "BrokenProcessPool: worker died"
+    assert DataPaths(tmp_path).manifest("r").exists()
+
+
+def test_interrupted_run_still_writes_manifest(tmp_path, fake_sim, monkeypatch):
+    write_demo(tmp_path)
+    monkeypatch.setattr(InlinePool, "interrupt", True, raising=False)
+    monkeypatch.setattr(run, "ProcessPoolExecutor", InlinePool)
+    with pytest.raises(KeyboardInterrupt):
+        run.generate([DEMO], "r", cfg(workers=2), SIM, tmp_path)
+    m = json.loads(DataPaths(tmp_path).manifest("r").read_text())
+    assert m["episodes"] and m["episodes"][0]["status"] == "success"
+
+
+@pytest.mark.parametrize("run_id", ["", ".", "..", "../x", "a/b", "/tmp/x"])
+def test_unsafe_run_id_is_rejected_before_deleting(tmp_path, fake_sim, run_id):
+    write_demo(tmp_path)
+    keep = tmp_path / "raw" / "keep.mp4"
+    keep.parent.mkdir()
+    keep.write_bytes(b"x")
+    with pytest.raises(ValueError, match="run id"):
+        run.generate([DEMO], run_id, cfg(), SIM, tmp_path, overwrite=True)
+    assert keep.exists() and fake_sim == []
