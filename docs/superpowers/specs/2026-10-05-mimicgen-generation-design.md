@@ -95,7 +95,9 @@ saved, error, size_mb`. `status` is one of `success`, `failure`, `placement_fail
 }
 ```
 
-`yield = successes / attempts`. `mean_episode_mb` is over saved episodes (null if none). No
+`generate` adds `complete`: false if the run was interrupted before every attempt was
+collected (workers may then have saved episodes the manifest does not list). `yield =
+successes / attempts`. `mean_episode_mb` is over saved episodes (null if none). No
 wall-clock timestamps. `git_commit` comes from `git rev-parse HEAD` (null outside a repo).
 
 ### CLI

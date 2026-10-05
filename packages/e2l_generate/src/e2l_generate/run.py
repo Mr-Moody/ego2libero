@@ -215,7 +215,9 @@ def generate(
                             r = _error(*futures[f], n_init, e)
                         results.append(_logged(r))
     finally:
-        # Also on Ctrl-C: the manifest describes whatever episodes were saved.
+        # Also on Ctrl-C. Then workers may have saved episodes that were never collected, so the
+        # manifest says whether every attempt is accounted for.
         manifest = summarise(results, run_id, cfg, sim_cfg)
+        manifest["complete"] = len(results) == len(jobs)
         paths.manifest(run_id).write_text(json.dumps(manifest, indent=2))
     return manifest

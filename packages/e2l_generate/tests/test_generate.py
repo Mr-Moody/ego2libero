@@ -75,6 +75,7 @@ def test_inline_run_saves_successes_and_manifest(tmp_path, fake_sim):
     assert SimEpisode.load(run_dir / f"{DEMO}_0002").success
     assert json.loads((run_dir / "manifest.json").read_text()) == m
     assert m["mean_episode_mb"] is not None
+    assert m["complete"] is True
     # Only the referenced objects, mapped to LIBERO names, are placed.
     assert {tuple(names) for _, names in fake_sim} == {("akita_black_bowl_1", "plate_1")}
 
@@ -182,6 +183,7 @@ def test_dead_worker_is_an_attempt_error(tmp_path, fake_sim, monkeypatch):
     m = run.generate([DEMO], "r", cfg(workers=2), SIM, tmp_path)
     assert [e["status"] for e in m["episodes"]] == ["success", "error", "success", "success"]
     assert m["episodes"][1]["error"] == "BrokenProcessPool: worker died"
+    assert m["complete"] is True  # every attempt is accounted for
     assert DataPaths(tmp_path).manifest("r").exists()
 
 
@@ -191,8 +193,13 @@ def test_interrupted_run_still_writes_manifest(tmp_path, fake_sim, monkeypatch):
     monkeypatch.setattr(run, "ProcessPoolExecutor", InlinePool)
     with pytest.raises(KeyboardInterrupt):
         run.generate([DEMO], "r", cfg(workers=2), SIM, tmp_path)
+    # Workers may have saved episodes the parent never collected, so the manifest flags itself
+    # incomplete; everything it does list as saved is on disk.
     m = json.loads(DataPaths(tmp_path).manifest("r").read_text())
-    assert m["episodes"] and m["episodes"][0]["status"] == "success"
+    assert m["complete"] is False
+    run_dir = DataPaths(tmp_path).generated("r")
+    assert all((run_dir / f"{e['stem']}.npz").exists() for e in m["episodes"] if e["saved"])
+    assert 2 not in [e["attempt"] for e in m["episodes"]]
 
 
 @pytest.mark.parametrize("run_id", ["", ".", "..", "../x", "a/b", "/tmp/x"])
