@@ -1,9 +1,12 @@
 # MimicGen-style multiplication: RobotSegments -> SimEpisodes.
+# Attempt k starts from LIBERO init state k % 50, then perturbs every object the demo's
+# segments reference. Transits between segments come from sim.yaml `transit_speed`.
 
 episodes_per_demo: 50                    # attempts per source demo; only successes are kept
-xy_range: 0.08                           # object placement noise, +/- m around nominal
+xy_range: 0.08                           # object placement noise, +/- m around the init state
 yaw_range: 0.5                           # +/- rad about the sim z axis
-transit_steps: 30                        # interpolated steps between segments
-workers: 4                               # parallel replay processes
+min_separation: 0.11                     # m, xy; init states put bowl and plate 0.13-0.16 apart
+max_placement_tries: 20                  # resamples before an attempt is `placement_failed`
+workers: 4                               # parallel replay processes (1 = inline, for debugging)
 keep_failures: false                     # store failed rollouts too (debugging only)
 seed: 0

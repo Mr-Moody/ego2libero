@@ -14,6 +14,7 @@ E2L := uv run e2l
 setup:            ## install every group (laptop); Spark: uv sync --group train --group dev
 	uv sync --all-groups
 	uv run pre-commit install
+	[[ -e data ]] || { mkdir -p /mnt/data/e2l-data && ln -s /mnt/data/e2l-data data; }
 
 worktree:         ## inside a linked worktree: own venv, shared data/ and models/, tests
 	bash scripts/worktree_setup.sh

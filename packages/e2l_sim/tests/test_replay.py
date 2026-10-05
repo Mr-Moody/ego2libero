@@ -1,5 +1,4 @@
 import os
-from pathlib import Path
 
 import imageio.v3 as iio
 import numpy as np
@@ -10,6 +9,7 @@ from e2l_common.geometry import make_T, rotvec_to_matrix
 from e2l_common.paths import repo_root
 from e2l_common.schemas import RobotSegment, RobotSegments
 from e2l_sim.control import pose_error
+from e2l_sim.libero_setup import libero_available
 from e2l_sim.render import save_video, upright
 from e2l_sim.replay import hold_at_grip_changes, libero_state, resample_segment, transit
 from e2l_sim.scene import table_to_sim
@@ -72,21 +72,9 @@ def test_save_video_round_trip(tmp_path):
     assert iio.imread(path).shape == (5, 32, 48, 3)
 
 
-def _libero_available() -> bool:
-    try:
-        from e2l_sim.libero_setup import ensure_libero_config
-
-        ensure_libero_config()
-        from libero.libero import get_libero_path
-
-        return Path(get_libero_path("assets"), "scenes").is_dir()
-    except Exception:
-        return False
-
-
 @pytest.mark.sim
 @pytest.mark.slow
-@pytest.mark.skipif(not _libero_available(), reason="needs LIBERO and its assets")
+@pytest.mark.skipif(not libero_available(), reason="needs LIBERO and its assets")
 def test_scripted_bowl_onto_plate_succeeds():
     """The hand-designed demo in scripts/scripted_segments.py solves the chosen task."""
     import importlib.util

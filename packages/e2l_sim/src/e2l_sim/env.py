@@ -44,3 +44,11 @@ def make_env(cfg: SimConfig, episode_index: int = 0, obs_type: str = "pixels_age
         control_freq=cfg.control_freq,
         control_mode="relative",
     )
+
+
+def init_state_count(cfg: SimConfig) -> int:
+    """Number of LIBERO init states for `cfg.task_id` (50 for LIBERO-Goal)."""
+    ensure_libero_config()
+    from lerobot.envs.libero import _get_suite
+
+    return len(_get_suite(cfg.suite).get_task_init_states(cfg.task_id))

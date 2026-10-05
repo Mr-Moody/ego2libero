@@ -3,6 +3,7 @@
 import numpy as np
 from scipy.spatial.transform import Rotation
 
+from e2l_common.config import SimConfig
 from e2l_common.geometry import make_T
 
 
@@ -45,3 +46,16 @@ def set_object_poses(env, T_sim_obj: dict[str, np.ndarray]) -> None:
 def table_to_sim(T_table_x: np.ndarray, T_sim_table: np.ndarray) -> np.ndarray:
     """T_sim_x = T_sim_table @ T_table_x for (...,4,4) poses."""
     return np.asarray(T_sim_table, dtype=np.float64) @ np.asarray(T_table_x, dtype=np.float64)
+
+
+def nominal_object_poses(cfg: SimConfig, episode_index: int) -> dict[str, np.ndarray]:
+    """T_sim_obj (4,4) of every movable object in LIBERO init state `episode_index`, read after
+    the same seeded reset that `replay` performs."""
+    from e2l_sim.env import make_env
+
+    env = make_env(cfg, episode_index=episode_index)
+    try:
+        env.reset(seed=cfg.seed)
+        return object_poses(env)
+    finally:
+        env.close()

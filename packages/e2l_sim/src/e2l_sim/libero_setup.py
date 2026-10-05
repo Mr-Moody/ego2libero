@@ -42,3 +42,15 @@ def list_tasks(suite: str) -> list[tuple[int, str, str]]:
 
     bench = benchmark.get_benchmark_dict()[suite]()
     return [(i, bench.get_task(i).name, bench.get_task(i).language) for i in range(bench.n_tasks)]
+
+
+def libero_available() -> bool:
+    """True if LIBERO imports and its scene assets resolve (gates `sim` tests). hf-libero keeps
+    assets in the Hugging Face cache, not the package, so ask `get_assets_path`."""
+    try:
+        ensure_libero_config()
+        from libero.libero import get_assets_path
+
+        return Path(get_assets_path(), "scenes").is_dir()
+    except Exception:
+        return False

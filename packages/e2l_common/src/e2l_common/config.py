@@ -120,9 +120,10 @@ class SimConfig(_Config):
 
 class GenerateConfig(_Config):
     episodes_per_demo: int = 50
-    xy_range: float = 0.08  # metres, uniform +/- around the source object pose
-    yaw_range: float = 0.5  # radians
-    transit_steps: int = 30
+    xy_range: float = 0.08  # metres, uniform +/- around the init-state object pose
+    yaw_range: float = 0.5  # radians, about the sim z axis through the object origin
+    min_separation: float = 0.11  # metres, xy distance kept between perturbed objects
+    max_placement_tries: int = 20
     workers: int = 4
     keep_failures: bool = False
     seed: int = 0

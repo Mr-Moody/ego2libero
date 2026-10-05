@@ -49,6 +49,8 @@ one pydantic model each in `e2l_common.config`; override with `--set key.sub=val
   `unset PYTHONPATH` before `uv run` (the Makefile already unexports it).
 - `/` is nearly full: `.venv` is a symlink to `/mnt/data/venvs/ego2libero`; uv cache is on
   `/mnt/data`. Use `HF_HOME=/mnt/data/hf-cache` for checkpoints.
+- `data/` is a symlink to `/mnt/data/e2l-data` (`make setup` creates it): generated episodes
+  are tens of MB each. Create it in the main checkout before `make worktree`.
 - Headless rendering: `MUJOCO_GL=egl` (set by the Makefile and `e2l_sim`).
 - Only `opencv-contrib-python` may provide `cv2`; root `pyproject.toml` overrides drop
   `opencv-python` / `opencv-python-headless` pulled by lerobot, hf-libero and robosuite.
