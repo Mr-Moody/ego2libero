@@ -605,7 +605,9 @@ def summarise(
     results = sorted(results, key=lambda r: (r.demo_id, r.attempt))
     demos: dict[str, dict] = {}
     for r in results:
-        counts = demos.setdefault(r.demo_id, {"attempts": 0} | dict.fromkeys(_COUNT_KEY.values(), 0))
+        counts = demos.setdefault(
+            r.demo_id, {"attempts": 0} | dict.fromkeys(_COUNT_KEY.values(), 0)
+        )
         counts["attempts"] += 1
         counts[_COUNT_KEY[r.status]] += 1
     for counts in demos.values():
@@ -938,7 +940,9 @@ def generate(
     run_dir = paths.generated(run_id)
     missing = [d for d in demo_ids if not paths.robot_segments(d).with_suffix(".npz").exists()]
     if missing:
-        raise FileNotFoundError(f"no robot segments for {missing} in {paths.root / 'robot_segments'}")
+        raise FileNotFoundError(
+            f"no robot segments for {missing} in {paths.root / 'robot_segments'}"
+        )
     if run_dir.exists() and any(run_dir.iterdir()):
         if not overwrite:
             raise FileExistsError(f"{run_dir} is not empty; pass overwrite to replace it")

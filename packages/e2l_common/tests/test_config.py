@@ -43,3 +43,12 @@ def test_pose_T():
     T = Pose(xyz=(1, 2, 3), rotvec=(0, 0, np.pi)).T
     np.testing.assert_allclose(T[:3, 3], [1, 2, 3])
     np.testing.assert_allclose(T[:3, :3] @ [1, 0, 0], [-1, 0, 0], atol=1e-12)
+
+
+def test_generate_config_separation_defaults_and_no_transit_steps():
+    from e2l_common.config import GenerateConfig
+
+    cfg = GenerateConfig()
+    assert cfg.min_separation == 0.11 and cfg.max_placement_tries == 20
+    with pytest.raises(ValidationError):
+        GenerateConfig(transit_steps=30)
