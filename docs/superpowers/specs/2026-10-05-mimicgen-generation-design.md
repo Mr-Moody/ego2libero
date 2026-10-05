@@ -53,10 +53,11 @@ object name -> `T_sim_obj` (4,4)), close the env. Lives in `e2l_sim` because it 
 zlib.crc32(demo_id.encode()), k]))`. Deterministic per attempt, independent of worker count
 and scheduling.
 
-`run_attempt(demo_id, k, run_id, cfg, sim_cfg, data_root) -> AttemptResult` (one worker job):
+`run_attempt(demo_id, k, n_init, run_id, cfg, sim_cfg, data_root) -> AttemptResult` (one worker job):
 
 1. Load `RobotSegments` for `demo_id` (cached per process).
-2. `episode_index = k % n_init`; nominal poses via `nominal_object_poses` (cached per process
+2. `episode_index = k % n_init` (`n_init` from `e2l_sim.env.init_state_count`, read once by
+   the parent); nominal poses via `nominal_object_poses` (cached per process
    and init state).
 3. `sample_object_poses`; `None` -> status `placement_failed`.
 4. `replay(segments, sim_cfg, T_sim_obj=sampled, episode_index=episode_index)`.
@@ -70,7 +71,9 @@ saved, error, size_mb`. `status` is one of `success`, `failure`, `placement_fail
 
 `generate(demo_ids, run_id, cfg, sim_cfg, data_root, overwrite=False) -> dict`:
 
-- Refuse (`FileExistsError`) if `manifest.json` exists for `run_id` and not `overwrite`.
+- Refuse (`FileExistsError`) if `generated/<run_id>/` exists and is not empty, unless
+  `overwrite`, which deletes it first (no stale episodes from an earlier run survive).
+- Refuse (`FileNotFoundError`) before any sim work if a demo has no robot segments.
 - Jobs = every `(demo_id, k)` for `k < cfg.episodes_per_demo`.
 - `cfg.workers == 1`: run inline. Otherwise `ProcessPoolExecutor(cfg.workers,
   mp_context=get_context("spawn"))` — EGL contexts do not survive `fork`.
@@ -102,8 +105,9 @@ every demo in `data/robot_segments`; ends by printing a per-demo yield table.
 
 ### Config (`GenerateConfig`, `configs/generate.yaml`)
 
-Remove `transit_steps`. Add `min_separation: float = 0.15` (m, xy, between perturbed objects)
-and `max_placement_tries: int = 20`. Keep `episodes_per_demo`, `xy_range`, `yaw_range`,
+Remove `transit_steps`. Add `min_separation: float = 0.11` (m, xy, between perturbed
+objects; init states put the bowl and plate 0.128-0.157 m apart, and closer placements risk
+the bowl starting on the plate) and `max_placement_tries: int = 20`. Keep `episodes_per_demo`, `xy_range`, `yaw_range`,
 `workers`, `keep_failures`, `seed`.
 
 ### Data root
@@ -121,7 +125,8 @@ Fast (no sim):
   `None` when tries run out (e.g. `min_separation` larger than achievable).
 - `attempt_seed`: same inputs -> same draws; different `k` or `demo_id` -> different draws.
 - `summarise`: counts, yield, `mean_episode_mb`, episode entries.
-- `generate` refuses an existing manifest without `overwrite`.
+- `generate` refuses a non-empty run directory without `overwrite`; `overwrite` removes stale
+  files; a demo without robot segments fails before any sim work.
 - `test_skeleton.py`: drop the `check_stubs` assertion (no stubs remain); keep the CLI help
   check.
 
