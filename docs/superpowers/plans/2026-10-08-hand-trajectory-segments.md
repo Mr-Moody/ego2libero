@@ -51,7 +51,9 @@ design doc; design decisions are under "Decisions" below.
   hand-valid frames; segments with fewer than 2 valid frames are dropped. The segment closing at
   event *e* uses the object nearest the hand at *e*, held at its pose at *e*; the trailing
   segment (after the last event) reuses the last event's object and pose; a demo with no events
-  is one segment closed at its last frame. This matches `scripts/scripted_segments.py`
+  is one segment closed at its last frame. At a release the carried object is nearest the hand,
+  so release events exclude the object referenced by the preceding grasp (the held one); the
+  reference is then the place target. This matches `scripts/scripted_segments.py`
   (approach→grasp ends with grip 1; carry→release ends with grip 0; then a retreat).
 - **Dwell.** Runs of constant grip shorter than `min_dwell_s` (run length × median frame period)
   are flipped, shortest first, until none remain or one run is left.
@@ -1066,7 +1068,7 @@ git commit -m "feat(segment): binarise aperture with hysteresis and minimum dwel
 **Interfaces:**
 - Consumes: Task 5 `aperture_to_grip`, `grip_events`; `DemoTrajectory`, `HandSegment(s)`.
 - Produces: `nearest_valid_index(valid, index) -> int`,
-  `reference_object(demo, event_index) -> str`, `segment_demo(demo, cfg) -> HandSegments`.
+  `reference_object(demo, event_index, exclude: frozenset[str] = frozenset()) -> str`, `segment_demo(demo, cfg) -> HandSegments`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1133,7 +1135,8 @@ def test_nearest_valid_index():
 def test_reference_object_is_nearest_at_event_and_skips_unseen():
     demo = _demo()
     assert reference_object(demo, 30) == "bowl"
-    assert reference_object(demo, 60) == "plate"
+    assert reference_object(demo, 60) == "bowl"  # the carried bowl is nearest at release
+    assert reference_object(demo, 60, exclude=frozenset({"bowl"})) == "plate"
     assert reference_object(_demo(plate_seen=False), 60) == "bowl"
 
 
@@ -1184,12 +1187,15 @@ def test_no_events_gives_one_segment_and_event_on_last_frame_adds_none():
 - [ ] **Step 3: Implement `assign.py`** (drop the `not_implemented` import):
 
 ```python
-def reference_object(demo: DemoTrajectory, event_index: int) -> str:
-    """(docstring unchanged; add:) Objects never seen are skipped; ValueError if none is."""
+def reference_object(
+    demo: DemoTrajectory, event_index: int, exclude: frozenset[str] = frozenset()
+) -> str:
+    """(docstring unchanged; add:) Objects in `exclude` (e.g. the one being carried at a
+    release) and objects never seen are skipped; ValueError if none is left."""
     hand = demo.T_table_hand[nearest_valid_index(demo.hand_valid, event_index), :3, 3]
     best, best_d = None, np.inf
     for k, name in enumerate(demo.object_names):
-        if not demo.obj_valid[:, k].any():
+        if name in exclude or not demo.obj_valid[:, k].any():
             continue
         j = nearest_valid_index(demo.obj_valid[:, k], event_index)
         d = float(np.linalg.norm(demo.T_table_obj[j, k, :3, 3] - hand))
@@ -1225,9 +1231,16 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
     frames are kept and segments with fewer than 2 are dropped. The trailing segment after the
     last event reuses that event's object and pose."""
     grip = aperture_to_grip(demo.t, demo.aperture, cfg)
-    events = [e.index for e in grip_events(demo.t, grip)]
+    found = grip_events(demo.t, grip)
+    events = [e.index for e in found]
     last = len(demo.t) - 1
     bounds = [0, *events, last]
+    # Reference object per closing event; a release skips the object grasped before it.
+    refs: list[str] = []
+    held: frozenset[str] = frozenset()
+    for e in found:
+        refs.append(reference_object(demo, e.index, held if e.kind == "release" else frozenset()))
+        held = frozenset({refs[-1]}) if e.kind == "grasp" else frozenset()
     segments = []
     for s, (i0, i1) in enumerate(zip(bounds[:-1], bounds[1:], strict=True)):
         frames = np.arange(i0, i1 + 1)
@@ -1235,7 +1248,7 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
         if len(frames) < 2:
             continue
         closing = events[s] if s < len(events) else (events[-1] if events else last)
-        ref = reference_object(demo, closing)
+        ref = refs[s] if s < len(refs) else (refs[-1] if refs else reference_object(demo, last))
         k = demo.object_names.index(ref)
         T_obj_table = inv_T(demo.T_table_obj[nearest_valid_index(demo.obj_valid[:, k], closing), k])
         segments.append(
