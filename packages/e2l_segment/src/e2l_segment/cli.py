@@ -25,6 +25,10 @@ def run(
     paths = DataPaths.default()
     segments = segment_demo(DemoTrajectory.load(paths.perception(demo_id)), cfg)
     segments.save(paths.segments(demo_id))
+    typer.echo(
+        f"{demo_id}: {len(segments.segments)} segments "
+        + " | ".join(f"{s.ref_object} {s.t_start:.2f}-{s.t_end:.2f}s" for s in segments.segments)
+    )
 
 
 @app.command()
