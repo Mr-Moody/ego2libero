@@ -32,8 +32,16 @@ def run(
 
 
 @app.command()
-def viz(demo_id: str) -> None:
+def viz(
+    demo_id: str,
+    config: Path = config_option("segment"),
+    out_dir: Path = typer.Option(Path("outputs/segment")),
+    set_: list[str] = set_option(),
+) -> None:
     """Plot aperture, grip and segment boundaries for one demo."""
-    from e2l_common.stub import not_implemented
+    from e2l_common.schemas import DemoTrajectory
+    from e2l_segment.viz import plot_segments
 
-    not_implemented("e2l_segment.cli.viz")
+    cfg = load_stage_config(config, set_, SegmentConfig)
+    demo = DemoTrajectory.load(DataPaths.default().perception(demo_id))
+    typer.echo(f"wrote {plot_segments(demo, cfg, out_dir / f'{demo_id}_segments.png')}")

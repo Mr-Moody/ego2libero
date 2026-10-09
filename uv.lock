@@ -570,10 +570,14 @@ version = "0.1.0"
 source = { editable = "packages/e2l_segment" }
 dependencies = [
     { name = "e2l-common", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "matplotlib", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "e2l-common", editable = "packages/e2l_common" }]
+requires-dist = [
+    { name = "e2l-common", editable = "packages/e2l_common" },
+    { name = "matplotlib", specifier = ">=3.8" },
+]
 
 [[package]]
 name = "e2l-sim"
