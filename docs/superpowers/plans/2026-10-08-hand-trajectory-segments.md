@@ -631,7 +631,9 @@ def observe_frames(
                     world, detection.landmarks_2d, intr.K, intr.dist, T_world_hand
                 )
                 if obs.T_cam_hand is not None:
-                    obs.keypoints_cam = _transform(compose(obs.T_cam_hand, inv_T(T_world_hand)), world)
+                    obs.keypoints_cam = _transform(
+                        compose(obs.T_cam_hand, inv_T(T_world_hand)), world
+                    )
             yield t, frame, obs
 
 
@@ -676,9 +678,7 @@ def assemble_trajectory(
         flat = smooth_tracks(flat, seen, 1 / fps, cfg.smooth_accel_noise, cfg.smooth_meas_std)
     elif seen.any():
         frames = np.arange(N)
-        flat = np.stack(
-            [np.interp(frames, frames[seen], col[seen]) for col in flat.T], axis=1
-        )
+        flat = np.stack([np.interp(frames, frames[seen], col[seen]) for col in flat.T], axis=1)
     kp = flat.reshape(N, 21, 3)
     kp[~hand_valid] = np.nan
 
@@ -837,9 +837,7 @@ def draw_observation(
     )
 
 
-def render_overlay(
-    video: Path, out: Path, cfg: PerceptionConfig, capture: CaptureConfig
-) -> Path:
+def render_overlay(video: Path, out: Path, cfg: PerceptionConfig, capture: CaptureConfig) -> Path:
     """Re-track `video` and write an mp4 with `draw_observation` overlays to `out`."""
     import imageio.v2 as imageio
 
@@ -1365,15 +1363,35 @@ def plot_segments(demo: DemoTrajectory, cfg: SegmentConfig, out: Path) -> Path:
     ax.plot(demo.t, demo.aperture, color="black", lw=1.2, label="aperture")
     ax.axhline(cfg.close_threshold, color="tab:red", ls="--", lw=0.8, label="close")
     ax.axhline(cfg.open_threshold, color="tab:green", ls="--", lw=0.8, label="open")
-    ax.fill_between(demo.t, 0, 1, where=grip == 1, transform=ax.get_xaxis_transform(),
-                    color="tab:orange", alpha=0.15, label="grip closed")
+    ax.fill_between(
+        demo.t,
+        0,
+        1,
+        where=grip == 1,
+        transform=ax.get_xaxis_transform(),
+        color="tab:orange",
+        alpha=0.15,
+        label="grip closed",
+    )
     for e in grip_events(demo.t, grip):
         ax.axvline(e.t, color="tab:red" if e.kind == "grasp" else "tab:green", lw=1)
-        ax.annotate(e.kind, (e.t, 1.0), xycoords=("data", "axes fraction"), rotation=90,
-                    va="top", ha="right", fontsize=8)
+        ax.annotate(
+            e.kind,
+            (e.t, 1.0),
+            xycoords=("data", "axes fraction"),
+            rotation=90,
+            va="top",
+            ha="right",
+            fontsize=8,
+        )
     for s in segment_demo(demo, cfg).segments:
-        ax.annotate(s.ref_object, ((s.t_start + s.t_end) / 2, 0.02),
-                    xycoords=("data", "axes fraction"), ha="center", fontsize=8)
+        ax.annotate(
+            s.ref_object,
+            ((s.t_start + s.t_end) / 2, 0.02),
+            xycoords=("data", "axes fraction"),
+            ha="center",
+            fontsize=8,
+        )
     ax.set(xlabel="t (s)", ylabel="aperture (m)", title=f"{demo.demo_id} segmentation")
     ax.set_ylim(0, np.nanmax(np.r_[demo.aperture, cfg.open_threshold]) * 1.15)
     ax.legend(loc="upper right", fontsize=8)
