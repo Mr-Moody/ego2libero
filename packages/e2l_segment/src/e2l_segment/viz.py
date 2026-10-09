@@ -44,7 +44,12 @@ def plot_segments(demo: DemoTrajectory, cfg: SegmentConfig, out: Path) -> Path:
             ha="right",
             fontsize=8,
         )
-    for s in segment_demo(demo, cfg).segments:
+    title = f"{demo.demo_id} segmentation"
+    try:
+        segments = segment_demo(demo, cfg).segments
+    except ValueError as err:
+        segments, title = [], f"{title} (no segments: {err})"
+    for s in segments:
         ax.annotate(
             s.ref_object,
             ((s.t_start + s.t_end) / 2, 0.02),
@@ -52,7 +57,7 @@ def plot_segments(demo: DemoTrajectory, cfg: SegmentConfig, out: Path) -> Path:
             ha="center",
             fontsize=8,
         )
-    ax.set(xlabel="t (s)", ylabel="aperture (m)", title=f"{demo.demo_id} segmentation")
+    ax.set(xlabel="t (s)", ylabel="aperture (m)", title=title)
     ax.set_ylim(0, np.nanmax(np.r_[demo.aperture, cfg.open_threshold]) * 1.15)
     ax.legend(loc="upper right", fontsize=8)
     fig.tight_layout()

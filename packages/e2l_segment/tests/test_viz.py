@@ -28,3 +28,23 @@ def test_plot_segments_writes_png(tmp_path):
     )
     out = plot_segments(demo, SegmentConfig(), tmp_path / "seg.png")
     assert out.is_file() and out.stat().st_size > 1000
+
+
+def test_plot_segments_survives_segmentation_error(tmp_path):
+    N = 90
+    aperture = np.full(N, 0.08)
+    aperture[30:60] = 0.02
+    demo = DemoTrajectory(
+        demo_id="20261008_test_000",
+        fps=30.0,
+        object_names=["bowl"],
+        t=np.arange(N) / 30,
+        T_table_hand=np.tile(np.eye(4), (N, 1, 1)),
+        hand_valid=np.ones(N, bool),
+        keypoints_table=np.zeros((N, 21, 3)),
+        aperture=aperture,
+        T_table_obj=np.tile(np.eye(4), (N, 1, 1, 1)),
+        obj_valid=np.zeros((N, 1), bool),
+    )
+    out = plot_segments(demo, SegmentConfig(), tmp_path / "seg.png")
+    assert out.is_file() and out.stat().st_size > 1000
