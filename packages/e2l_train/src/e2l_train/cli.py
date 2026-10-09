@@ -12,8 +12,14 @@ app = typer.Typer(help="LeRobot export and SmolVLA fine-tuning.", no_args_is_hel
 
 @app.command()
 def export(
-    run_ids: list[str] = typer.Argument(None, help="Generated runs to include (default: all)."),
-    max_episodes: int = typer.Option(None, help="Export at most this many successful episodes."),
+    run_ids: list[str] = typer.Argument(
+        None,
+        help="Generated runs to include. Default: EVERY run under data/generated (replay, "
+        "scripted50, ...) in one dataset; pass ids explicitly for Run A / Run B.",
+    ),
+    max_episodes: int = typer.Option(
+        None, help="Keep only the first N successful episodes (sorted file order)."
+    ),
     config: Path = config_option("train/smolvla"),
     set_: list[str] = set_option(),
 ) -> None:

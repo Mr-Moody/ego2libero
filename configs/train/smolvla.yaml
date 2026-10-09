@@ -9,7 +9,9 @@ batch_size: 32
 num_workers: 4
 save_freq: 5000
 wandb: false
-# appended verbatim; add e.g. "--policy.device=cuda" on the command line with --set.
+# Appended verbatim to lerobot-train. The camera flags live here, so code building a TrainConfig
+# without this yaml does not get them. `--set extra_args=[...]` REPLACES this list: any override
+# must repeat both camera flags. GPU runs need no override (device defaults to cuda).
 # smolvla_base expects observation.images.camera1..3; our dataset has image and image2.
 extra_args:
   - '--rename_map={"observation.images.image": "observation.images.camera1", "observation.images.image2": "observation.images.camera2"}'

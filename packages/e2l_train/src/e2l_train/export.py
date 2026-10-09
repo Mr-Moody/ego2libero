@@ -27,14 +27,18 @@ FEATURES = {
 }
 
 
-def episode_frames(ep: SimEpisode) -> list[dict]:
-    """One LeRobot frame per control step. Images are rotated 180 deg: HuggingFaceVLA/libero
-    stores them that way, and LeRobot's LiberoProcessorStep rotates live observations to match."""
+def _check_cameras(ep: SimEpisode) -> None:
     for cam in CAMERAS:
         if cam not in ep.images:
             raise ValueError(f"episode has no camera {cam!r} (has {sorted(ep.images)})")
         if ep.images[cam].shape[1:] != IMAGE_SHAPE:
             raise ValueError(f"camera {cam!r} images are {ep.images[cam].shape[1:]}, want 256x256")
+
+
+def episode_frames(ep: SimEpisode) -> list[dict]:
+    """One LeRobot frame per control step. Images are rotated 180 deg: HuggingFaceVLA/libero
+    stores them that way, and LeRobot's LiberoProcessorStep rotates live observations to match."""
+    _check_cameras(ep)
     return [
         {
             **{
@@ -65,6 +69,11 @@ def export_dataset(
     keep = [p for p in episode_paths if _succeeded(p)][:max_episodes]
     if not keep:
         raise ValueError(f"no successful episodes among {len(episode_paths)} files")
+    for path in keep:  # fail before creating anything, naming the offending file
+        try:
+            _check_cameras(SimEpisode.load(path))
+        except ValueError as e:
+            raise ValueError(f"{path}: {e}") from e
 
     dataset = LeRobotDataset.create(
         cfg.dataset_repo_id,
@@ -73,6 +82,7 @@ def export_dataset(
         root=cfg.dataset_root,
         robot_type=ROBOT_TYPE,
         use_videos=False,
+        image_writer_threads=4,
     )
     for path in keep:
         for frame in episode_frames(SimEpisode.load(path)):

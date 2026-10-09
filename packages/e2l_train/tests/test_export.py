@@ -116,3 +116,13 @@ def test_export_without_successes_raises_before_writing(tmp_path):
     with pytest.raises(ValueError, match="no successful"):
         export_dataset([_save(_episode(success=False), tmp_path / "ep" / "a")], cfg)
     assert not cfg.dataset_root.exists()
+
+
+def test_export_bad_camera_names_file_and_creates_nothing(tmp_path):
+    bad = _episode()
+    bad.images = {c: np.zeros((3, 128, 128, 3), np.uint8) for c in bad.images}
+    paths = [_save(_episode(), tmp_path / "ep" / "a"), _save(bad, tmp_path / "ep" / "bad")]
+    cfg = _cfg(tmp_path)
+    with pytest.raises(ValueError, match="bad.npz.*256"):
+        export_dataset(paths, cfg)
+    assert not cfg.dataset_root.exists()
