@@ -43,6 +43,12 @@ def run(
     capture = load_config(capture_config, model=CaptureConfig)
     demo = run_demo(paths.normalised(demo_id), demo_id, cfg, capture)
     demo.save(paths.perception(demo_id))
+    typer.echo(
+        f"{demo_id}: {len(demo.t)} frames, hand valid {demo.hand_valid.mean():.1%}, "
+        + ", ".join(
+            f"{n} {demo.obj_valid[:, k].mean():.1%}" for k, n in enumerate(demo.object_names)
+        )
+    )
 
 
 @app.command()
