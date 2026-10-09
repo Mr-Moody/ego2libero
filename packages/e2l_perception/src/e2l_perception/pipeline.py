@@ -39,6 +39,8 @@ def observe_frames(
 ) -> Iterator[tuple[float, np.ndarray, FrameObservation]]:
     """Yield (t, BGR frame, observation) for every frame: board and object poses from ArUco,
     the demonstrating hand from MediaPipe + HandFilter, and its metric pose by PnP."""
+    if cfg.mirrored:
+        raise ValueError("mirrored frames break ArUco and the chirality of PnP; set mirrored=false")
     from e2l_perception.hand.detector import HandDetector
     from e2l_perception.hand.filter import HandFilter
     from e2l_perception.markers import MarkerTracker

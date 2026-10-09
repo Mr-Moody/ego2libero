@@ -96,3 +96,8 @@ def test_observe_frames_rejects_mismatched_intrinsics(tmp_path):
     capture = CaptureConfig(intrinsics=calib)
     with pytest.raises(ValueError, match="1920"):
         next(observe_frames(video, PerceptionConfig(), capture))
+
+
+def test_observe_frames_rejects_mirrored(tmp_path):
+    with pytest.raises(ValueError, match="mirrored"):
+        next(observe_frames(tmp_path / "x.mp4", PerceptionConfig(mirrored=True), CaptureConfig()))

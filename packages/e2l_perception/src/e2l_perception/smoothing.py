@@ -26,7 +26,7 @@ def smooth_tracks(
     """Smooth M scalar tracks z (N,M) sampled every dt seconds; rows where `valid` (N,) is False
     are missing and get filled. Model: constant velocity with white acceleration of spectral
     density `accel_noise` (m^2/s^3), measurement std `meas_std` (m). Rows before the first
-    valid one stay NaN."""
+    valid one stay NaN; rows after the last valid one are extrapolated (the caller masks them)."""
     z = np.asarray(z, dtype=float)
     out = np.full_like(z, np.nan)
     idx = np.flatnonzero(valid)
