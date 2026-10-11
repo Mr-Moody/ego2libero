@@ -1,8 +1,10 @@
 # HandSegments -> RobotSegments.
 
-# Wrist (palm frame origin) to Panda gripper centre, in the hand frame. Tune per grasp style.
-T_hand_ee: {xyz: [0.0, 0.0, 0.08], rotvec: [0.0, 0.0, 0.0]}
-canonicalise_top_down: true              # snap approach axis to straight down for top grasps
+# Wrist (palm frame origin; x towards the middle knuckle) to the grip point, in the hand frame.
+# Measure it from a recorded demo with `e2l retarget calibrate <demo_id>`.
+T_hand_ee: {xyz: [0.08, 0.0, 0.0], rotvec: [0.0, 0.0, 0.0]}
+canonicalise_top_down: true              # grip straight down; fingers close along closing_axis
+closing_axis: [0.0, 1.0, 0.0]            # hand frame; `e2l retarget calibrate` measures it too
 workspace_min: [-0.4, -0.4, 0.0]         # table frame, m
 workspace_max: [0.4, 0.4, 0.5]
 max_linear_speed: 0.5                    # m/s

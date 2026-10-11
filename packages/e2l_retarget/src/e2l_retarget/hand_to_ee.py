@@ -6,11 +6,38 @@ from e2l_common.config import RetargetConfig
 from e2l_common.schemas import HandSegments, RobotSegments
 from e2l_common.stub import not_implemented
 
+_UP = np.array([0.0, 0.0, 1.0])
+_MIN_HORIZONTAL = 0.2  # closing axis with a shorter horizontal projection is ambiguous
+
+
+def top_down_rotations(closing: np.ndarray) -> np.ndarray:
+    """Rotations (M,3,3) with z straight down and x along the horizontal projection of the
+    closing direction (M,3) in the object frame (z up). A near-vertical closing direction reuses
+    the previous x (object x before any). The gripper is symmetric under a half turn about z, so
+    x is flipped to stay within 90 deg of the previous x (first frame: object x)."""
+    x_prev = np.array([1.0, 0.0, 0.0])
+    z = -_UP
+    R = np.empty((len(closing), 3, 3))
+    for i, a in enumerate(np.asarray(closing, dtype=np.float64)):
+        h = a - (a @ _UP) * _UP
+        n = np.linalg.norm(h)
+        x = h / n if n >= _MIN_HORIZONTAL else x_prev
+        if x @ x_prev < 0:
+            x = -x
+        R[i] = np.column_stack([x, np.cross(z, x), z])
+        x_prev = x
+    return R
+
 
 def hand_to_ee(T_obj_hand: np.ndarray, cfg: RetargetConfig) -> np.ndarray:
-    """T_obj_ee (M,4,4) = T_obj_hand (M,4,4) @ cfg.T_hand_ee.T, optionally canonicalised so the
-    gripper approach axis points down (-z of the table frame) for top-down grasps."""
-    not_implemented("e2l_retarget.hand_to_ee.hand_to_ee")
+    """T_obj_ee (M,4,4) = T_obj_hand (M,4,4) @ cfg.T_hand_ee.T: the grip point at a fixed offset
+    in the hand frame. With `cfg.canonicalise_top_down` the rotation becomes a top-down grasp
+    whose fingers close along the hand's `cfg.closing_axis` (see `top_down_rotations`)."""
+    T_obj_ee = np.asarray(T_obj_hand, dtype=np.float64) @ cfg.T_hand_ee.T
+    if cfg.canonicalise_top_down:
+        closing = T_obj_hand[:, :3, :3] @ np.asarray(cfg.closing_axis, dtype=np.float64)
+        T_obj_ee[:, :3, :3] = top_down_rotations(closing)
+    return T_obj_ee
 
 
 def retarget_segments(segments: HandSegments, cfg: RetargetConfig) -> RobotSegments:
