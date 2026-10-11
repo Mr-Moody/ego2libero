@@ -155,7 +155,7 @@ class WidePoseConfig(_Config):
     min_separation: float = 0.11  # m, xy, from each moved object to every other object
     table_xy: tuple[tuple[float, float], tuple[float, float]] = ((-0.35, 0.25), (-0.40, 0.40))
     max_tries: int = 20  # draws per reset before falling back to the init state
-    settle_tol: float = 0.02  # m, max xy drift / |dz| of a moved object while settling
+    settle_tol: float = 0.02  # m, max xy drift / |dz| of any object while settling
     seed_offset: int = 10_000  # wide episode i uses seed + seed_offset + i
 
 
