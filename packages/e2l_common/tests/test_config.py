@@ -52,3 +52,18 @@ def test_generate_config_separation_defaults_and_no_transit_steps():
     assert cfg.min_separation == 0.11 and cfg.max_placement_tries == 20
     with pytest.raises(ValidationError):
         GenerateConfig(transit_steps=30)
+
+
+def test_eval_config_wide_defaults_and_overrides(tmp_path):
+    from e2l_common.config import EvalConfig, WidePoseConfig
+
+    cfg = EvalConfig()
+    assert cfg.runs == {"reference": "HuggingFaceVLA/smolvla_libero"}
+    assert cfg.wide == WidePoseConfig()
+    assert (cfg.wide.min_offset, cfg.wide.max_offset) == (0.08, 0.15)
+    assert (cfg.wide.min_yaw, cfg.wide.max_yaw) == (0.5, 1.0)
+    assert cfg.wide.seed_offset == 10_000
+    path = tmp_path / "eval.yaml"
+    path.write_text("runs: {B: outputs/train/b}\n")
+    cfg = load_config(path, ["wide.max_offset=0.2"], EvalConfig)
+    assert cfg.runs == {"B": "outputs/train/b"} and cfg.wide.max_offset == 0.2
