@@ -13,8 +13,10 @@ table_board:
   marker_separation: 0.01                # gap between markers, m
   first_id: 0                            # board uses ids first_id .. first_id + 11
 
-# One marker per object. T_marker_obj places the object's canonical frame in the marker frame
-# (translation m + rotation vector rad); measure it once per object.
+# One marker per object. T_marker_obj (translation m + rotation vector rad) must place the object
+# frame at the object's base centre on the table, z up, with x matching the LIBERO object's x
+# (the sim body frame) -- retargeting, feasibility and replay assume it. Identity is only right
+# if the tag lies flat at the base centre. Measure it once per object.
 objects:
   bowl:
     marker_id: 20

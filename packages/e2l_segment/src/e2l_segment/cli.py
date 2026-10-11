@@ -19,7 +19,7 @@ def run(
 ) -> None:
     """Segment data/perception/<demo_id> into data/segments/<demo_id>."""
     from e2l_common.schemas import DemoTrajectory
-    from e2l_segment.segment import largest_gap, segment_demo
+    from e2l_segment.segment import largest_gap, object_tilt_deg, segment_demo
 
     cfg = load_stage_config(config, set_, SegmentConfig)
     paths = DataPaths.default()
@@ -30,6 +30,12 @@ def run(
         f"{demo_id}: {len(segments.segments)} segments "
         + " | ".join(f"{s.ref_object} {s.t_start:.2f}-{s.t_end:.2f}s" for s in segments.segments)
     )
+    for name, deg in object_tilt_deg(demo).items():
+        if deg > 15.0:
+            typer.echo(
+                f"WARNING: {name} z axis is {deg:.0f}° from the table normal; "
+                "check T_marker_obj in capture.yaml"
+            )
     for i, s in enumerate(segments.segments):
         gap = largest_gap(demo, s)
         typer.echo(f"  segment {i} ({s.ref_object}): largest interior hand gap {gap:.2f}s")

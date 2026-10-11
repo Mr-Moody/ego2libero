@@ -81,3 +81,15 @@ def largest_gap(demo: DemoTrajectory, segment: HandSegment) -> float:
     i0, i1 = (int(round(x * demo.fps)) for x in (segment.t_start, segment.t_end))
     valid = np.flatnonzero(demo.hand_valid[i0 : i1 + 1])
     return float(np.diff(valid).max() / demo.fps) if len(valid) > 1 else 0.0
+
+
+def object_tilt_deg(demo: DemoTrajectory) -> dict[str, float]:
+    """Median angle (deg) between each object's z axis and the table normal over its valid
+    frames; objects never seen are omitted."""
+    tilt = {}
+    for k, name in enumerate(demo.object_names):
+        valid = demo.obj_valid[:, k]
+        if valid.any():
+            cos = np.clip(demo.T_table_obj[valid, k, 2, 2], -1.0, 1.0)
+            tilt[name] = float(np.median(np.degrees(np.arccos(cos))))
+    return tilt

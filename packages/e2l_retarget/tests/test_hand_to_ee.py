@@ -80,3 +80,48 @@ def test_retarget_segments_maps_poses_grip_and_feasibility():
         robot.segments[0].T_obj_ee, hand_to_ee(segs.segments[0].T_obj_hand, cfg)
     )
     assert robot.segments[0].feasible.dtype == bool and robot.segments[1].feasible.all()
+
+
+def _palm_down_hand(yaw_deg: np.ndarray, yaw_obj: float = 0.0) -> np.ndarray:
+    """Rotations (M,3,3) of a palm-down hand whose knuckle axis points at `yaw_deg`."""
+    th = np.deg2rad(yaw_deg)
+    y = np.stack([np.cos(th), np.sin(th), np.zeros_like(th)], axis=1)
+    z = np.tile([0.0, 0.0, -1.0], (len(th), 1))
+    return np.stack([np.cross(y, z), y, z], axis=2)
+
+
+def test_top_down_rotations_x_init_seeds_continuity():
+    closing = np.array([[np.cos(np.deg2rad(120)), np.sin(np.deg2rad(120)), 0.0]])
+    assert top_down_rotations(closing)[0][:, 0] @ [1.0, 0.0, 0.0] > 0  # default: object x
+    x0 = top_down_rotations(closing, x_init=np.array([-0.5, 0.8, 0.0]))[0][:, 0]
+    np.testing.assert_allclose(x0, closing[0], atol=1e-12)
+
+
+def test_hand_to_ee_normalises_closing_axis():
+    R = rotvec_to_matrix(np.array([0.0, 0.0, np.pi / 2])) @ R_HAND  # knuckles along object y
+    T_hand = make_T(R, np.array([0.0, 0.0, 0.15]))[None]
+    a = hand_to_ee(T_hand, RetargetConfig(closing_axis=(0.0, 1.0, 0.0)))
+    b = hand_to_ee(T_hand, RetargetConfig(closing_axis=(0.0, 0.05, 0.0)))
+    np.testing.assert_allclose(a, b)
+    np.testing.assert_allclose(a[0, :3, 0], [0.0, 1.0, 0.0], atol=1e-12)
+
+
+def test_retarget_keeps_gripper_yaw_continuous_across_segment_boundary():
+    yaw_obj = np.deg2rad(10.0)
+    R_obj = rotvec_to_matrix(np.array([0.0, 0.0, yaw_obj]))  # bowl and plate share this yaw
+    n = 20
+    R_tab = _palm_down_hand(np.linspace(80, 120, n))  # table frame; hand yaw drifts 80 -> 120
+    T_hand = make_T(R_obj.T @ R_tab, np.tile([0.0, 0.0, 0.1], (n, 1)))
+    approach = HandSegment(
+        ref_object="bowl", t_start=0.0, t_end=1.0, T_obj_hand=T_hand,
+        grip=np.zeros(n, np.int8),
+    )  # fmt: skip
+    carry = HandSegment(
+        ref_object="plate", t_start=1.0, t_end=2.0, T_obj_hand=T_hand[-1:].repeat(5, axis=0),
+        grip=np.ones(5, np.int8),
+    )  # fmt: skip
+    segs = HandSegments(demo_id="20261011_test_000", fps=30.0, segments=[approach, carry])
+    robot = retarget_segments(segs, RetargetConfig())
+    x_last = R_obj @ robot.segments[0].T_obj_ee[-1, :3, 0]
+    x_first = R_obj @ robot.segments[1].T_obj_ee[0, :3, 0]
+    assert x_last @ x_first > 0.9

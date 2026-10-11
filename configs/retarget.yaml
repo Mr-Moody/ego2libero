@@ -1,11 +1,14 @@
 # HandSegments -> RobotSegments.
 
 # Wrist (palm frame origin; x towards the middle knuckle) to the grip point, in the hand frame.
-# Measure it from a recorded demo with `e2l retarget calibrate <demo_id>`.
+# The default is a placeholder: run `e2l retarget calibrate <demo_id>` on a recorded demo and
+# paste its two lines before the first replay.
 T_hand_ee: {xyz: [0.08, 0.0, 0.0], rotvec: [0.0, 0.0, 0.0]}
 canonicalise_top_down: true              # grip straight down; fingers close along closing_axis
 closing_axis: [0.0, 1.0, 0.0]            # hand frame; `e2l retarget calibrate` measures it too
+# Feasibility is advisory: `e2l retarget run` reports the fraction of feasible frames; replay
+# does not use it.
 min_height: -0.02                        # m, object frame: grip point not below the table
 max_object_distance: 0.6                 # m, grip point within this of the reference object
-max_linear_speed: 0.5                    # m/s
+max_linear_speed: 1.0                    # m/s
 max_angular_speed: 2.0                   # rad/s

@@ -37,19 +37,18 @@ def run(
 @app.command()
 def calibrate(
     demo_id: str,
-    segment_config: Path = typer.Option(
-        Path("configs/segment.yaml"), help="Segment config (grip thresholds)."
-    ),
+    segment_config: Path = config_option("segment"),
+    set_: list[str] = set_option(),
 ) -> None:
     """Measure T_hand_ee and closing_axis from data/perception/<demo_id>; prints the two
     retarget.yaml lines to paste."""
-    from e2l_common.config import SegmentConfig, load_config
+    from e2l_common.config import SegmentConfig
     from e2l_common.schemas import DemoTrajectory
     from e2l_retarget.calibrate import estimate_grip
     from e2l_segment.events import aperture_to_grip
 
     demo = DemoTrajectory.load(DataPaths.default().perception(demo_id))
-    seg_cfg = load_config(segment_config, model=SegmentConfig)
+    seg_cfg = load_stage_config(segment_config, set_, SegmentConfig)
     closed = aperture_to_grip(demo.t, demo.aperture, seg_cfg) == 1
     xyz, axis, n = estimate_grip(demo, closed)
     typer.echo(f"# {demo_id}: {n} closed-grip frames")

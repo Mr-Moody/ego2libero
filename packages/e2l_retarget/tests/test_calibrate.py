@@ -57,3 +57,13 @@ def test_estimate_grip_skips_invalid_and_nan_frames():
 def test_estimate_grip_without_closed_frames_raises():
     with pytest.raises(ValueError, match="20261011_test_000"):
         estimate_grip(_demo(), np.zeros(20, bool))
+
+
+def test_estimate_grip_tolerates_coincident_tips():
+    demo = _demo()
+    demo.keypoints_table[5, 8] = demo.keypoints_table[5, 4]
+    closed = np.zeros(20, bool)
+    closed[3:8] = True
+    _, axis, n = estimate_grip(demo, closed)
+    assert n == 5 and np.isfinite(axis).all()
+    np.testing.assert_allclose(axis, (INDEX - THUMB) / np.linalg.norm(INDEX - THUMB), atol=1e-9)
