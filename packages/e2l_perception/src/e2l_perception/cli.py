@@ -43,13 +43,31 @@ def run(
     capture = load_config(capture_config, model=CaptureConfig)
     demo = run_demo(paths.normalised(demo_id), demo_id, cfg, capture)
     demo.save(paths.perception(demo_id))
+    typer.echo(
+        f"{demo_id}: {len(demo.t)} frames, hand valid {demo.hand_valid.mean():.1%}, "
+        + ", ".join(
+            f"{n} {demo.obj_valid[:, k].mean():.1%}" for k, n in enumerate(demo.object_names)
+        )
+    )
 
 
 @app.command()
-def viz(demo_id: str, out_dir: Path = typer.Option(Path("outputs/perception"))) -> None:
+def viz(
+    demo_id: str,
+    config: Path = config_option("perception"),
+    capture_config: Path = typer.Option(Path("configs/capture.yaml"), help="Capture config."),
+    out_dir: Path = typer.Option(Path("outputs/perception")),
+    set_: list[str] = set_option(),
+) -> None:
     """Overlay video and trajectory plots for one demo."""
+    from e2l_common.config import load_config
+    from e2l_common.schemas import DemoTrajectory
     from e2l_perception.viz import plot_trajectory, render_overlay
 
+    cfg = load_stage_config(config, set_, PerceptionConfig)
     paths = DataPaths.default()
-    render_overlay(paths.normalised(demo_id), demo_id, out_dir / f"{demo_id}_overlay.mp4")
-    plot_trajectory(demo_id, out_dir / f"{demo_id}_trajectory.png")
+    capture = load_config(capture_config, model=CaptureConfig)
+    render_overlay(paths.normalised(demo_id), out_dir / f"{demo_id}_overlay.mp4", cfg, capture)
+    plot_trajectory(
+        DemoTrajectory.load(paths.perception(demo_id)), out_dir / f"{demo_id}_trajectory.png"
+    )

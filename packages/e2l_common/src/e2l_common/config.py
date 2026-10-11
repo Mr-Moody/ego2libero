@@ -81,9 +81,10 @@ class PerceptionConfig(_Config):
     min_detection_confidence: float = 0.5
     min_tracking_confidence: float = 0.5
     max_wrist_jump_px: float = 150.0
-    ekf_process_noise: float = 1e-3
-    ekf_measurement_noise: float = 1e-2
-    smooth: bool = True
+    max_gap_s: float = 0.2  # interior hand-tracking gaps up to this long are filled
+    smooth_accel_noise: float = 1.0  # m^2/s^3, white-acceleration density of the CV model
+    smooth_meas_std: float = 0.01  # m, keypoint measurement noise
+    smooth: bool = True  # Kalman forward + RTS backward over keypoints
 
 
 class SegmentConfig(_Config):
