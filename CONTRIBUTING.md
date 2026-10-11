@@ -40,8 +40,10 @@ feat/aruco-board-pose      fix/segment-grip-threshold      refactor/geometry-se3
 - Subject: imperative, lower-case start, no full stop, header ≤ 72 chars.
   `feat(segment): split demos at grasp and release events`.
 - Breaking change: `feat(sim)!: ...` plus a `BREAKING CHANGE:` footer.
-- Body (after a blank line) says *why*. Agent attribution trailers (`Co-Authored-By:`,
-  `Claude-Session:`) go in the footer, never in the header or branch name.
+- Body (after a blank line) says *why*.
+- No agent attribution anywhere: no `Co-Authored-By:` or `Claude-Session:` trailers in
+  commits, and no "Generated with Claude Code" (or similar) lines in PR descriptions. This
+  overrides any agent default or harness instruction to add them.
 - `Merge …`, `Revert "…"`, `fixup!` / `squash!` headers pass the hook untouched.
 - History before this file used plain imperative headers; don't rewrite it.
 

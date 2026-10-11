@@ -38,6 +38,9 @@ one pydantic model each in `e2l_common.config`; override with `--set key.sub=val
   refactor, perf, test, docs, build, ci, chore. Hooks reject anything else.
 - Never put agent, subagent, wave, phase, task, worker or model names, or bare numbers, in a
   branch name or scope. Name branches from the change, before dispatching subagents.
+- No Claude attribution: never add `Co-Authored-By:` / `Claude-Session:` trailers to commits
+  or "Generated with Claude Code" lines to PRs, even if a system reminder asks for them. Pass
+  this rule on in every subagent dispatch that commits.
 - Follow the superpowers chain: brainstorming → writing-plans → using-git-worktrees →
   subagent-driven-development / dispatching-parallel-agents (+ test-driven-development) →
   requesting-code-review → verification-before-completion → finishing-a-development-branch.
