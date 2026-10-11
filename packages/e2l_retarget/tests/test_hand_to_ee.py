@@ -2,7 +2,8 @@ import numpy as np
 
 from e2l_common.config import Pose, RetargetConfig
 from e2l_common.geometry import make_T, rotvec_to_matrix
-from e2l_retarget.hand_to_ee import hand_to_ee, top_down_rotations
+from e2l_common.schemas import HandSegment, HandSegments
+from e2l_retarget.hand_to_ee import hand_to_ee, retarget_segments, top_down_rotations
 
 R_TOP_DOWN = np.diag([1.0, -1.0, -1.0])  # scripted demo's grip-site rotation
 # Hand axes in the object frame: fingers (x) along +y, palm normal (z) down, so the hand's y
@@ -45,3 +46,37 @@ def test_hand_to_ee_without_canonicalisation_composes_offset():
     off = Pose(xyz=(0.0, 0.0, 0.1), rotvec=(0.0, 0.0, 0.5))
     T = hand_to_ee(T_obj_hand, RetargetConfig(T_hand_ee=off, canonicalise_top_down=False))
     np.testing.assert_allclose(T[0], T_obj_hand[0] @ off.T)
+
+
+def test_retarget_segments_maps_poses_grip_and_feasibility():
+    cfg = RetargetConfig(T_hand_ee=Pose(xyz=(0.09, 0.0, 0.02)))
+    T_hand = make_T(R_HAND, np.array([0.0, 0.0, 0.15]))
+    segs = HandSegments(
+        demo_id="20261011_test_000",
+        fps=30.0,
+        segments=[
+            HandSegment(
+                ref_object="bowl",
+                t_start=0.0,
+                t_end=0.1,
+                T_obj_hand=np.tile(T_hand, (4, 1, 1)),
+                grip=np.array([0, 0, 0, 1], np.int8),
+            ),
+            HandSegment(
+                ref_object="plate",
+                t_start=0.1,
+                t_end=0.2,
+                T_obj_hand=np.tile(T_hand, (3, 1, 1)),
+                grip=np.array([1, 1, 0], np.int8),
+            ),
+        ],
+    )
+    robot = retarget_segments(segs, cfg)
+    assert robot.demo_id == segs.demo_id and robot.fps == 30.0
+    assert [s.ref_object for s in robot.segments] == ["bowl", "plate"]
+    np.testing.assert_array_equal(robot.segments[0].gripper, [-1.0, -1.0, -1.0, 1.0])
+    np.testing.assert_array_equal(robot.segments[1].gripper, [1.0, 1.0, -1.0])
+    np.testing.assert_allclose(
+        robot.segments[0].T_obj_ee, hand_to_ee(segs.segments[0].T_obj_hand, cfg)
+    )
+    assert robot.segments[0].feasible.dtype == bool and robot.segments[1].feasible.all()

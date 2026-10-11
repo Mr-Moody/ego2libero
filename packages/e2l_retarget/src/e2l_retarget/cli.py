@@ -25,3 +25,10 @@ def run(
     paths = DataPaths.default()
     robot = retarget_segments(HandSegments.load(paths.segments(demo_id)), cfg)
     robot.save(paths.robot_segments(demo_id))
+    typer.echo(
+        f"{demo_id}: "
+        + " | ".join(
+            f"{s.ref_object} {len(s.T_obj_ee)} frames, {s.feasible.mean():.0%} feasible"
+            for s in robot.segments
+        )
+    )

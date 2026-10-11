@@ -3,8 +3,10 @@
 import numpy as np
 
 from e2l_common.config import RetargetConfig
-from e2l_common.schemas import HandSegments, RobotSegments
-from e2l_common.stub import not_implemented
+from e2l_common.schemas import HandSegments, RobotSegment, RobotSegments
+from e2l_retarget.feasibility import check_segment
+
+GRIPPER_OPEN, GRIPPER_CLOSED = -1.0, 1.0  # robosuite gripper convention
 
 _UP = np.array([0.0, 0.0, 1.0])
 _MIN_HORIZONTAL = 0.2  # closing axis with a shorter horizontal projection is ambiguous
@@ -42,5 +44,17 @@ def hand_to_ee(T_obj_hand: np.ndarray, cfg: RetargetConfig) -> np.ndarray:
 
 def retarget_segments(segments: HandSegments, cfg: RetargetConfig) -> RobotSegments:
     """Map every HandSegment to a RobotSegment: poses via `hand_to_ee`, grip {0,1} to robosuite
-    gripper {-1,+1}, and `feasible` from `feasibility.check_segment`."""
-    not_implemented("e2l_retarget.hand_to_ee.retarget_segments")
+    gripper {-1,+1}, and `feasible` from `feasibility.check_segment` at the demo fps."""
+    robot = []
+    for seg in segments.segments:
+        T_obj_ee = hand_to_ee(seg.T_obj_hand, cfg)
+        t = np.arange(len(T_obj_ee)) / segments.fps
+        robot.append(
+            RobotSegment(
+                ref_object=seg.ref_object,
+                T_obj_ee=T_obj_ee,
+                gripper=np.where(seg.grip > 0, GRIPPER_CLOSED, GRIPPER_OPEN),
+                feasible=check_segment(T_obj_ee, t, cfg),
+            )
+        )
+    return RobotSegments(demo_id=segments.demo_id, fps=segments.fps, segments=robot)
