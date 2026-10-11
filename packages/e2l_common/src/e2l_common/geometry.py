@@ -2,6 +2,8 @@
 so p_a = T_a_b @ p_b. Units: metres, radians, seconds. Rotations are matrices or rotation
 vectors; quaternions only appear at library call sites (see `quat_xyzw` naming)."""
 
+from itertools import combinations
+
 import numpy as np
 from scipy.spatial.transform import Rotation, Slerp
 
@@ -13,7 +15,10 @@ __all__ = [
     "inv_T",
     "make_T",
     "matrix_to_rotvec",
+    "perturb",
     "rotvec_to_matrix",
+    "sample_wide_offset",
+    "separated",
 ]
 
 
@@ -90,3 +95,34 @@ def delta_action(T_prev: np.ndarray, T_next: np.ndarray) -> np.ndarray:
     dpos = T_next[..., :3, 3] - T_prev[..., :3, 3]
     dR = T_next[..., :3, :3] @ np.swapaxes(T_prev[..., :3, :3], -1, -2)
     return np.concatenate([dpos, matrix_to_rotvec(dR)], axis=-1)
+
+
+def perturb(T_sim_obj: np.ndarray, d_xy: np.ndarray, yaw: float) -> np.ndarray:
+    """Shift an object pose (4,4) by `d_xy` in the sim xy plane and turn it by `yaw` about the
+    sim z axis through its own origin; height and tilt are unchanged."""
+    T = np.array(T_sim_obj, dtype=np.float64)
+    T[:3, :3] = rotvec_to_matrix(np.array([0.0, 0.0, yaw])) @ T[:3, :3]
+    T[:2, 3] += d_xy
+    return T
+
+
+def separated(poses: dict[str, np.ndarray], min_distance: float) -> bool:
+    """True if every pair of poses is at least `min_distance` apart in xy."""
+    return all(
+        np.linalg.norm(a[:2, 3] - b[:2, 3]) >= min_distance
+        for a, b in combinations(poses.values(), 2)
+    )
+
+
+def sample_wide_offset(
+    rng: np.random.Generator, min_offset: float, max_offset: float, min_yaw: float, max_yaw: float
+) -> tuple[np.ndarray, float]:
+    """One (d_xy, yaw) draw: d_xy uniform over the disc of radius `max_offset`, rejecting draws
+    inside the square +/- `min_offset` on both axes; |yaw| uniform in [min_yaw, max_yaw] with a
+    random sign."""
+    while True:
+        d_xy = rng.uniform(-max_offset, max_offset, size=2)
+        if np.linalg.norm(d_xy) <= max_offset and np.max(np.abs(d_xy)) > min_offset:
+            break
+    yaw = rng.uniform(min_yaw, max_yaw) * rng.choice([-1.0, 1.0])
+    return d_xy, float(yaw)

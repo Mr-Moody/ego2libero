@@ -1,29 +1,11 @@
 """Sample new object placements around nominal (LIBERO init-state) poses."""
 
 from collections.abc import Iterable
-from itertools import combinations
 
 import numpy as np
 
 from e2l_common.config import GenerateConfig
-from e2l_common.geometry import rotvec_to_matrix
-
-
-def perturb(T_sim_obj: np.ndarray, d_xy: np.ndarray, yaw: float) -> np.ndarray:
-    """Shift an object pose (4,4) by `d_xy` in the sim xy plane and turn it by `yaw` about the
-    sim z axis through its own origin; height and tilt are unchanged."""
-    T = np.array(T_sim_obj, dtype=np.float64)
-    T[:3, :3] = rotvec_to_matrix(np.array([0.0, 0.0, yaw])) @ T[:3, :3]
-    T[:2, 3] += d_xy
-    return T
-
-
-def separated(poses: dict[str, np.ndarray], min_distance: float) -> bool:
-    """True if every pair of poses is at least `min_distance` apart in xy."""
-    return all(
-        np.linalg.norm(a[:2, 3] - b[:2, 3]) >= min_distance
-        for a, b in combinations(poses.values(), 2)
-    )
+from e2l_common.geometry import perturb, separated
 
 
 def sample_object_poses(
