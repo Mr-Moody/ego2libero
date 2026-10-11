@@ -38,6 +38,12 @@ DGX Spark / training-only machines: `uv sync --group train --group dev`.
 
 TODO
 
+Each policy is evaluated on LIBERO's standard initial states and on a **wide-pose** setting
+where the bowl and plate are moved 8–15 cm and 0.5–1.0 rad beyond anything generation sampled
+(`configs/eval.yaml: wide`). `e2l eval rollout --run <A|B|reference> --setting <standard|wide>`
+writes `outputs/eval/<run>/<setting>/results.json`; `e2l eval report` turns them into
+`docs/figures/results.md`, `success_rates.png` and `rollouts.gif`.
+
 ## Design choices
 
 TODO
