@@ -6,7 +6,7 @@ the observation format the smolvla_libero checkpoint was trained on (cameras `im
 
 import os
 
-from e2l_common.config import SimConfig
+from e2l_common.config import SimConfig, WidePoseConfig
 from e2l_sim.libero_setup import ensure_libero_config
 
 
@@ -15,10 +15,16 @@ def libero_camera(name: str) -> str:
     return name if name.endswith("_image") else f"{name}_image"
 
 
-def make_env(cfg: SimConfig, episode_index: int = 0, obs_type: str = "pixels_agent_pos"):
+def make_env(
+    cfg: SimConfig,
+    episode_index: int = 0,
+    obs_type: str = "pixels_agent_pos",
+    wide: WidePoseConfig | None = None,
+):
     """LeRobot LiberoEnv for `cfg.suite` / `cfg.task_id`, rendering `cfg.camera_names` at
     `cfg.image_size` with `cfg.control_freq` Hz relative (delta) control. `episode_index` picks
-    the LIBERO init state. Rendering is headless (MUJOCO_GL=egl unless already set)."""
+    the LIBERO init state. With `wide`, each reset also moves the `cfg.object_map` objects to a
+    wide placement (`e2l_sim.wide`). Rendering is headless (MUJOCO_GL=egl unless already set)."""
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.setdefault("PYOPENGL_PLATFORM", os.environ["MUJOCO_GL"])
     ensure_libero_config()
@@ -30,7 +36,7 @@ def make_env(cfg: SimConfig, episode_index: int = 0, obs_type: str = "pixels_age
         raise ValueError(
             f"{cfg.suite} task {cfg.task_id} is {task.name!r}, but sim.yaml says {cfg.task_name!r}"
         )
-    return LiberoEnv(
+    kwargs = dict(
         task_suite=suite,
         task_id=cfg.task_id,
         task_suite_name=cfg.suite,
@@ -44,6 +50,11 @@ def make_env(cfg: SimConfig, episode_index: int = 0, obs_type: str = "pixels_age
         control_freq=cfg.control_freq,
         control_mode="relative",
     )
+    if wide is None:
+        return LiberoEnv(**kwargs)
+    from e2l_sim.wide import wide_pose_env_class
+
+    return wide_pose_env_class()(wide=wide, names=cfg.object_map.values(), **kwargs)
 
 
 def init_state_count(cfg: SimConfig) -> int:

@@ -6,10 +6,13 @@ are directly comparable with `lerobot-eval` and published smolvla_libero numbers
 import json
 import os
 from dataclasses import dataclass, field
+from functools import partial
 from pathlib import Path
 
 from e2l_common.config import EvalConfig, SimConfig
 from e2l_eval.metrics import wilson_interval
+
+SETTINGS = ("standard", "wide")
 
 
 @dataclass
@@ -19,10 +22,29 @@ class RolloutResult:
     successes: list[bool]
     seeds: list[int]
     video_paths: list[str] = field(default_factory=list)
+    run: str = "custom"
+    setting: str = "standard"
+    placements: list[dict] = field(default_factory=list)  # wide only: per-episode object poses
 
     @property
     def success_rate(self) -> float:
         return sum(self.successes) / len(self.successes) if self.successes else float("nan")
+
+
+def write_results(result: RolloutResult, out_dir: Path) -> Path:
+    """`out_dir/results.json`: the result plus success rate, 95% Wilson interval and the outcome
+    of each rendered episode (video i is episode i)."""
+    lo, hi = wilson_interval(sum(result.successes), len(result.successes))
+    summary = {
+        **result.__dict__,
+        "video_successes": result.successes[: len(result.video_paths)],
+        "success_rate": result.success_rate,
+        "wilson_95": [lo, hi],
+    }
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / "results.json"
+    path.write_text(json.dumps(summary, indent=2))
+    return path
 
 
 def _libero_env_config(sim_cfg: SimConfig):
@@ -56,14 +78,21 @@ def rollout(
     out_dir: Path,
     n_episodes: int | None = None,
     max_videos: int = 1,
+    setting: str = "standard",
+    run: str = "custom",
 ) -> RolloutResult:
-    """Run `n_episodes` (default cfg.n_episodes) seeded episodes (seeds cfg.seed + i) of a policy
-    on the chosen task, saving up to `max_videos` mp4s and `results.json` in `out_dir`."""
+    """Run `n_episodes` (default cfg.n_episodes) seeded episodes of a policy on the chosen task,
+    saving up to `max_videos` mp4s and `results.json` in `out_dir`. `standard` uses seeds
+    cfg.seed + i on LIBERO's init states; `wide` uses seeds cfg.seed + cfg.wide.seed_offset + i
+    and moves the task objects after each reset (`e2l_sim.wide`)."""
+    if setting not in SETTINGS:
+        raise ValueError(f"setting must be one of {SETTINGS}, got {setting!r}")
     os.environ.setdefault("MUJOCO_GL", "egl")
     os.environ.setdefault("PYOPENGL_PLATFORM", os.environ["MUJOCO_GL"])
     from e2l_sim.libero_setup import ensure_libero_config
 
     ensure_libero_config()
+    import gymnasium as gym
     import torch
     from lerobot.configs.policies import PreTrainedConfig
     from lerobot.envs.factory import make_env, make_env_pre_post_processors
@@ -78,7 +107,14 @@ def rollout(
     policy_cfg.pretrained_path = policy_path
     policy_cfg.device = cfg.device
 
-    env = make_env(env_cfg, n_envs=1)[sim_cfg.suite][sim_cfg.task_id]
+    if setting == "wide":
+        from e2l_sim.env import make_env as make_sim_env
+
+        env = gym.vector.SyncVectorEnv([partial(make_sim_env, sim_cfg, 0, wide=cfg.wide)])
+        start_seed = cfg.seed + cfg.wide.seed_offset
+    else:
+        env = make_env(env_cfg, n_envs=1)[sim_cfg.suite][sim_cfg.task_id]
+        start_seed = cfg.seed
     try:
         policy = make_policy(
             cfg=policy_cfg, env_cfg=env_cfg, rename_map=checkpoint_rename_map(policy_path)
@@ -102,8 +138,9 @@ def rollout(
                 n_episodes=n_episodes,
                 max_episodes_rendered=max_videos,
                 videos_dir=out_dir / "videos",
-                start_seed=cfg.seed,
+                start_seed=start_seed,
             )
+        placements = list(env.envs[0].placements) if setting == "wide" else []
     finally:
         env.close()
 
@@ -114,8 +151,9 @@ def rollout(
         successes=[bool(e["success"]) for e in episodes],
         seeds=[int(e["seed"]) for e in episodes],
         video_paths=[str(p) for p in info.get("video_paths", [])],
+        run=run,
+        setting=setting,
+        placements=placements,
     )
-    lo, hi = wilson_interval(sum(result.successes), len(result.successes))
-    summary = {**result.__dict__, "success_rate": result.success_rate, "wilson_95": [lo, hi]}
-    (out_dir / "results.json").write_text(json.dumps(summary, indent=2))
+    write_results(result, out_dir)
     return result

@@ -1,9 +1,27 @@
 # Policy evaluation and ablations.
 
 policy_path: HuggingFaceVLA/smolvla_libero   # checkpoint dir or hub id
+runs:                                        # e2l eval rollout --run <label>
+  reference: HuggingFaceVLA/smolvla_libero   # LIBERO teleop data; context only
+  # A: outputs/train/run_a/checkpoints/last/pretrained_model   # human demos only
+  # B: outputs/train/run_b/checkpoints/last/pretrained_model   # + generated episodes
 n_episodes: 50                               # per evaluated policy
 seed: 1000                                   # episode i uses seed + i
 output_dir: outputs/eval
 device: cuda
 demo_counts: [5, 10, 20, 40]                 # number of human demos in the ablation sweep
 augmentation: [false, true]                  # without / with demo multiplication
+
+wide:                                        # --setting wide: task objects moved after reset
+  min_offset: 0.08                           # m; offsets inside +/- this square are rejected (= generate xy_range)
+  max_offset: 0.15                           # m; radial
+  min_yaw: 0.5                               # rad; |yaw| (= generate yaw_range)
+  max_yaw: 1.0
+  min_separation: 0.11                       # m, xy, moved object to any other object
+  # Sim-frame xy box for moved object centres: robot reach (x <= 0.25) and table edge. Fixtures
+  # (cabinet/rack y < -0.125, stove x < -0.16 & y > 0.11; measured 2026-10-11) are not boxed out:
+  # a draw that hits one fails the settle check and is redrawn (0/40 seeds fell back).
+  table_xy: [[-0.35, 0.25], [-0.40, 0.40]]
+  max_tries: 20
+  settle_tol: 0.02                           # m; every object (moved or not) must stay put
+  seed_offset: 10000                         # wide seeds = seed + 10000 + i

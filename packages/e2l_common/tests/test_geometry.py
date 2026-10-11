@@ -10,7 +10,10 @@ from e2l_common.geometry import (
     inv_T,
     make_T,
     matrix_to_rotvec,
+    perturb,
     rotvec_to_matrix,
+    sample_wide_offset,
+    separated,
 )
 
 RNG = np.random.default_rng(0)
@@ -84,3 +87,40 @@ def test_delta_action_identity_and_batch():
 def test_compose_requires_args():
     with pytest.raises(ValueError):
         compose()
+
+
+def test_perturb_shifts_xy_and_turns_about_z():
+    T = make_T(rotvec_to_matrix(np.array([0.0, 0.0, 0.3])), [0.1, -0.2, 0.9])
+    P = perturb(T, np.array([0.05, -0.01]), 0.4)
+    np.testing.assert_allclose(P[:3, 3], [0.15, -0.21, 0.9])
+    np.testing.assert_allclose(matrix_to_rotvec(P[:3, :3]), [0.0, 0.0, 0.7], atol=1e-12)
+    np.testing.assert_allclose(T[:3, 3], [0.1, -0.2, 0.9])  # input untouched
+
+
+def test_separated_uses_xy_only():
+    a = make_T(np.eye(3), [0.0, 0.0, 0.0])
+    b = make_T(np.eye(3), [0.1, 0.0, 5.0])
+    assert separated({"a": a, "b": b}, 0.1)
+    assert not separated({"a": a, "b": b}, 0.11)
+    assert separated({"a": a}, 1.0)
+
+
+def test_sample_wide_offset_stays_outside_square_inside_disc():
+    rng = np.random.default_rng(0)
+    for _ in range(2000):
+        d, yaw = sample_wide_offset(rng, 0.08, 0.15, 0.5, 1.0)
+        assert d.shape == (2,)
+        assert np.linalg.norm(d) <= 0.15 + 1e-12
+        assert np.max(np.abs(d)) > 0.08
+        assert 0.5 <= abs(yaw) <= 1.0
+
+
+def test_sample_wide_offset_is_seeded_and_covers_both_yaw_signs():
+    a = [sample_wide_offset(np.random.default_rng(5), 0.08, 0.15, 0.5, 1.0) for _ in range(3)]
+    b = [sample_wide_offset(np.random.default_rng(5), 0.08, 0.15, 0.5, 1.0) for _ in range(3)]
+    for (da, ya), (db, yb) in zip(a, b, strict=True):
+        np.testing.assert_array_equal(da, db)
+        assert ya == yb
+    rng = np.random.default_rng(1)
+    signs = {np.sign(sample_wide_offset(rng, 0.08, 0.15, 0.5, 1.0)[1]) for _ in range(50)}
+    assert signs == {-1.0, 1.0}

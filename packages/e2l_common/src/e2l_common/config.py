@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 import numpy as np
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from e2l_common.geometry import make_T, rotvec_to_matrix
 
@@ -22,6 +22,7 @@ __all__ = [
     "SegmentConfig",
     "SimConfig",
     "TrainConfig",
+    "WidePoseConfig",
     "load_config",
 ]
 
@@ -144,12 +145,39 @@ class TrainConfig(_Config):
     extra_args: list[str] = Field(default_factory=list)
 
 
+class WidePoseConfig(_Config):
+    """Wide-pose evaluation: task objects moved beyond the generation range after reset."""
+
+    min_offset: float = 0.08  # m, offsets inside this square (both axes) are rejected
+    max_offset: float = 0.15  # m, max radial xy offset from the init-state pose
+    min_yaw: float = 0.5  # rad, |yaw| about the sim z axis
+    max_yaw: float = 1.0
+    min_separation: float = 0.11  # m, xy, from each moved object to every other object
+    table_xy: tuple[tuple[float, float], tuple[float, float]] = ((-0.35, 0.25), (-0.40, 0.40))
+    max_tries: int = 20  # draws per reset before falling back to the init state
+    settle_tol: float = 0.02  # m, max xy drift / |dz| of any object while settling
+    seed_offset: int = 10_000  # wide episode i uses seed + seed_offset + i
+
+    @model_validator(mode="after")
+    def _drawable(self) -> "WidePoseConfig":
+        # the offset sampler rejects draws until one lands in range: an empty range never ends
+        if not (self.min_offset < self.max_offset and self.min_yaw <= self.max_yaw):
+            raise ValueError("wide needs min_offset < max_offset and min_yaw <= max_yaw")
+        if self.max_tries < 1:
+            raise ValueError("wide.max_tries must be at least 1")
+        return self
+
+
 class EvalConfig(_Config):
     policy_path: str = "HuggingFaceVLA/smolvla_libero"
+    runs: dict[str, str] = Field(
+        default_factory=lambda: {"reference": "HuggingFaceVLA/smolvla_libero"}
+    )  # label -> checkpoint dir or hub id
     n_episodes: int = 50
     seed: int = 1000
     output_dir: Path = Path("outputs/eval")
     device: str = "cuda"
+    wide: WidePoseConfig = Field(default_factory=WidePoseConfig)
     demo_counts: list[int] = Field(default_factory=lambda: [5, 10, 20, 40])
     augmentation: list[bool] = Field(default_factory=lambda: [False, True])
 
