@@ -47,15 +47,19 @@ tested on synthetic result files.
 
 ```python
 class WidePoseConfig(_Config):
-    min_offset: float = 0.08     # m, offsets inside this square (both axes) are rejected
-    max_offset: float = 0.15     # m, max radial xy offset from the init-state pose
-    min_yaw: float = 0.5         # rad, |yaw| about the sim z axis
+    min_offset: float = 0.08  # m, offsets inside this square (both axes) are rejected
+    max_offset: float = 0.15  # m, max radial xy offset from the init-state pose
+    min_yaw: float = 0.5  # rad, |yaw| about the sim z axis
     max_yaw: float = 1.0
-    min_separation: float = 0.11 # m, xy, between any two movable objects after the move
-    table_xy: list[list[float]] = [[-0.35, 0.25], [-0.40, 0.40]]  # [[xmin,xmax],[ymin,ymax]], m, sim frame
-    max_tries: int = 20          # draws per reset before falling back to the init state
-    settle_tol: float = 0.02     # m, max xy drift / z drop of a moved object while settling
+    min_separation: float = 0.11  # m, xy, between any two movable objects after the move
+    table_xy: list[list[float]] = [
+        [-0.35, 0.25],
+        [-0.40, 0.40],
+    ]  # [[xmin,xmax],[ymin,ymax]], m, sim frame
+    max_tries: int = 20  # draws per reset before falling back to the init state
+    settle_tol: float = 0.02  # m, max xy drift / z drop of a moved object while settling
     seed_offset: int = 10_000
+
 
 class EvalConfig:  # additions
     runs: dict[str, str] = {"reference": "HuggingFaceVLA/smolvla_libero"}  # label -> checkpoint
@@ -153,3 +157,12 @@ are only the fallback for old files without them). Writes:
   same seed give identical poses.
 - Manual: `e2l eval rollout --run reference --setting standard` and `--setting wide` with
   `--set n_episodes=10`, then `e2l eval report`; look at the GIF and the wide placements.
+
+## Changes during implementation (2026-10-11)
+
+- The separation check covers only pairs that include a moved object (unmoved objects may
+  already sit closer than `min_separation` in an init state).
+- The settle check covers every movable object, moved or not, in both height directions.
+- `table_xy` stays at the loose default. Measured fixtures (cabinet and rack at y < -0.125,
+  stove at x < -0.16, y > 0.11) are not boxed out: draws that hit them fail the settle check and
+  are redrawn. Over 40 seeds no episode fell back to the init state; a tight box did on 11/40.

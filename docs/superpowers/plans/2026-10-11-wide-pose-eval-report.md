@@ -376,8 +376,10 @@ def test_placement_valid_checks_table_and_moved_pairs_only():
     assert not placement_valid(off_table, others, CFG)
     near_cheese = {"bowl": make_T(np.eye(3), [-0.2, -0.35, 0.9])}
     assert not placement_valid(near_cheese, others, CFG)
-    two_close = {"bowl": make_T(np.eye(3), [0.1, 0.1, 0.9]),
-                 "plate": make_T(np.eye(3), [0.15, 0.1, 0.9])}
+    two_close = {
+        "bowl": make_T(np.eye(3), [0.1, 0.1, 0.9]),
+        "plate": make_T(np.eye(3), [0.15, 0.1, 0.9]),
+    }
     assert not placement_valid(two_close, others, CFG)
 
 
@@ -445,7 +447,9 @@ def sample_wide_placement(
         raise KeyError(f"objects {missing} are not in the scene; have {sorted(nominal)}")
     moved = {}
     for n in names:
-        d_xy, yaw = sample_wide_offset(rng, cfg.min_offset, cfg.max_offset, cfg.min_yaw, cfg.max_yaw)
+        d_xy, yaw = sample_wide_offset(
+            rng, cfg.min_offset, cfg.max_offset, cfg.min_yaw, cfg.max_yaw
+        )
         moved[n] = perturb(nominal[n], d_xy, yaw)
     others = {n: T for n, T in nominal.items() if n not in moved}
     return moved if placement_valid(moved, others, cfg) else None
@@ -838,9 +842,21 @@ def test_rollout_cli_writes_under_run_and_setting(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr(rollout_module, "rollout", lambda *a, **k: calls.append((a, k)))
     configs = repo_root() / "configs"
-    args = ["rollout", "--run", "reference", "--setting", "wide", "--videos", "2",
-            "-c", str(configs / "eval.yaml"), "--sim-config", str(configs / "sim.yaml"),
-            "--set", f"output_dir={tmp_path}"]
+    args = [
+        "rollout",
+        "--run",
+        "reference",
+        "--setting",
+        "wide",
+        "--videos",
+        "2",
+        "-c",
+        str(configs / "eval.yaml"),
+        "--sim-config",
+        str(configs / "sim.yaml"),
+        "--set",
+        f"output_dir={tmp_path}",
+    ]
     result = CliRunner().invoke(app, args)
     assert result.exit_code == 0, result.output
     (policy, _, _, out_dir), kwargs = calls[0]
@@ -876,7 +892,8 @@ def resolve_policy(cfg: EvalConfig, run: str | None, policy: str | None) -> tupl
         return run, policy
     if run not in cfg.runs:
         raise typer.BadParameter(
-            f"unknown run {run!r}; eval.yaml runs: {', '.join(sorted(cfg.runs))}", param_hint="--run"
+            f"unknown run {run!r}; eval.yaml runs: {', '.join(sorted(cfg.runs))}",
+            param_hint="--run",
         )
     return run, cfg.runs[run]
 
@@ -897,7 +914,8 @@ def rollout(
 
     if setting not in rollout_module.SETTINGS:
         raise typer.BadParameter(
-            f"{setting!r} is not one of {', '.join(rollout_module.SETTINGS)}", param_hint="--setting"
+            f"{setting!r} is not one of {', '.join(rollout_module.SETTINGS)}",
+            param_hint="--setting",
         )
     cfg = load_stage_config(config, set_, EvalConfig)
     label, policy_path = resolve_policy(cfg, run, policy)
@@ -910,7 +928,9 @@ def rollout(
 
 @app.command()
 def report(
-    results: Path = typer.Option(Path("outputs/eval"), help="Folder of <run>/<setting>/results.json."),
+    results: Path = typer.Option(
+        Path("outputs/eval"), help="Folder of <run>/<setting>/results.json."
+    ),
     out_dir: Path = typer.Option(Path("docs/figures")),
 ) -> None:
     """Results table, success-rate chart and rollout GIF into docs/figures/."""
@@ -973,8 +993,12 @@ def _write(root: Path, run: str, setting: str, successes, videos=0, placements=(
         frames = np.full((12, 64, 64, 3), 40 * (i + 1), dtype=np.uint8)
         imageio.mimwrite(p, frames, fps=20)
         paths.append(f"/other/machine/outputs/eval/{run}/{setting}/videos/{p.name}")
-    data = {"successes": successes, "video_paths": paths,
-            "video_successes": successes[:videos], "placements": list(placements)}
+    data = {
+        "successes": successes,
+        "video_paths": paths,
+        "video_successes": successes[:videos],
+        "placements": list(placements),
+    }
     if not legacy:
         data |= {"run": run, "setting": setting}
     (d / "results.json").write_text(json.dumps(data))
@@ -991,8 +1015,13 @@ def test_load_results_falls_back_to_folders_and_skips_bad_files(tmp_path):
 def test_table_orders_runs_and_marks_missing_cells(tmp_path):
     _write(tmp_path, "reference", "standard", [True] * 8 + [False] * 2)
     _write(tmp_path, "B", "standard", [True] * 5 + [False] * 5)
-    _write(tmp_path, "B", "wide", [True, False, False, False],
-           placements=[{"placement_failed": True}, {"placement_failed": False}])
+    _write(
+        tmp_path,
+        "B",
+        "wide",
+        [True, False, False, False],
+        placements=[{"placement_failed": True}, {"placement_failed": False}],
+    )
     _write(tmp_path, "zeta", "wide", [False])
     table = results_table(load_results(tmp_path))
     lines = table.splitlines()
@@ -1085,8 +1114,11 @@ def results_table(rows: list[dict]) -> str:
     wide = [p for r in rows if r["setting"] == "wide" for p in r.get("placements", [])]
     failed = sum(bool(p.get("placement_failed")) for p in wide)
     if failed:
-        lines += ["", f"{failed} of {len(wide)} wide episodes kept the init-state placement "
-                  "(no valid wide placement settled)."]
+        lines += [
+            "",
+            f"{failed} of {len(wide)} wide episodes kept the init-state placement "
+            "(no valid wide placement settled).",
+        ]
     return "\n".join(lines) + "\n"
 
 
