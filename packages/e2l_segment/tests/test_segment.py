@@ -175,3 +175,18 @@ def test_no_events_gives_one_segment_and_event_on_last_frame_adds_none():
     demo.aperture[89] = 0.02
     segs = segment_demo(demo, SegmentConfig())
     assert all(len(s.T_obj_hand) >= 2 for s in segs.segments)
+
+
+def test_object_tilt_deg_reports_median_angle_to_table_normal():
+    from e2l_common.geometry import rotvec_to_matrix
+    from e2l_segment.segment import object_tilt_deg
+
+    demo = _demo()
+    R = rotvec_to_matrix(np.array([np.pi / 2, 0.0, 0.0]))  # plate lying on its side
+    demo.T_table_obj[:, 1, :3, :3] = R
+    demo.obj_valid[:10, 1] = False
+    tilt = object_tilt_deg(demo)
+    assert tilt["bowl"] == pytest.approx(0.0, abs=1e-6)
+    assert tilt["plate"] == pytest.approx(90.0)
+    demo.obj_valid[:, 1] = False
+    assert "plate" not in object_tilt_deg(demo)

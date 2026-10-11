@@ -96,9 +96,10 @@ class SegmentConfig(_Config):
 class RetargetConfig(_Config):
     T_hand_ee: Pose = Pose()  # wrist to Panda gripper centre
     canonicalise_top_down: bool = True
-    workspace_min: Vec3 = (-0.4, -0.4, 0.0)  # table frame, metres
-    workspace_max: Vec3 = (0.4, 0.4, 0.5)
-    max_linear_speed: float = 0.5  # m/s
+    closing_axis: Vec3 = (0.0, 1.0, 0.0)  # hand-frame axis the fingers close along
+    min_height: float = -0.02  # m, grip point above the object's base plane (the table)
+    max_object_distance: float = 0.6  # m, grip point to the reference object's origin
+    max_linear_speed: float = 1.0  # m/s
     max_angular_speed: float = 2.0  # rad/s
 
 
