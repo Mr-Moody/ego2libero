@@ -311,7 +311,9 @@ def test_retarget_segments_maps_poses_grip_and_feasibility():
     assert [s.ref_object for s in robot.segments] == ["bowl", "plate"]
     np.testing.assert_array_equal(robot.segments[0].gripper, [-1.0, -1.0, -1.0, 1.0])
     np.testing.assert_array_equal(robot.segments[1].gripper, [1.0, 1.0, -1.0])
-    np.testing.assert_allclose(robot.segments[0].T_obj_ee, hand_to_ee(segs.segments[0].T_obj_hand, cfg))
+    np.testing.assert_allclose(
+        robot.segments[0].T_obj_ee, hand_to_ee(segs.segments[0].T_obj_hand, cfg)
+    )
     assert robot.segments[0].feasible.dtype == bool and robot.segments[1].feasible.all()
 ```
 
@@ -443,7 +445,9 @@ INDEX = np.array([0.10, 0.01, -0.02])
 
 def _demo(n: int = 20) -> DemoTrajectory:
     rng = np.random.default_rng(0)
-    T = make_T(rotvec_to_matrix(rng.normal(scale=0.5, size=(n, 3))), rng.normal(scale=0.1, size=(n, 3)))
+    T = make_T(
+        rotvec_to_matrix(rng.normal(scale=0.5, size=(n, 3))), rng.normal(scale=0.1, size=(n, 3))
+    )
     kp = np.zeros((n, 21, 3))
     kp[:, 4] = np.einsum("nij,j->ni", T[:, :3, :3], THUMB) + T[:, :3, 3]
     kp[:, 8] = np.einsum("nij,j->ni", T[:, :3, :3], INDEX) + T[:, :3, 3]
@@ -503,9 +507,7 @@ from e2l_common.schemas import DemoTrajectory
 THUMB_TIP, INDEX_TIP = 4, 8
 
 
-def estimate_grip(
-    demo: DemoTrajectory, closed: np.ndarray
-) -> tuple[np.ndarray, np.ndarray, int]:
+def estimate_grip(demo: DemoTrajectory, closed: np.ndarray) -> tuple[np.ndarray, np.ndarray, int]:
     """Over hand-valid frames where the grip is `closed` (N,) bool and both fingertips are
     finite: the median pinch point (thumb/index tip midpoint) and the normalised mean
     thumb-to-index direction, both in the hand frame, plus the number of frames used. These are
@@ -551,7 +553,9 @@ def calibrate(
     closed = aperture_to_grip(demo.t, demo.aperture, seg_cfg) == 1
     xyz, axis, n = estimate_grip(demo, closed)
     typer.echo(f"# {demo_id}: {n} closed-grip frames")
-    typer.echo(f"T_hand_ee: {{xyz: [{xyz[0]:.3f}, {xyz[1]:.3f}, {xyz[2]:.3f}], rotvec: [0.0, 0.0, 0.0]}}")
+    typer.echo(
+        f"T_hand_ee: {{xyz: [{xyz[0]:.3f}, {xyz[1]:.3f}, {xyz[2]:.3f}], rotvec: [0.0, 0.0, 0.0]}}"
+    )
     typer.echo(f"closing_axis: [{axis[0]:.3f}, {axis[1]:.3f}, {axis[2]:.3f}]")
 ```
 
