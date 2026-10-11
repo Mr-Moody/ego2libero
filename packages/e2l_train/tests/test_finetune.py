@@ -11,7 +11,7 @@ def test_build_command_from_config():
     cfg = TrainConfig(steps=10, batch_size=2, wandb=True, extra_args=["--policy.device=cpu"])
     cmd = build_command(cfg)
     assert cmd[0] == "lerobot-train"
-    assert "--policy.path=HuggingFaceVLA/smolvla_libero" in cmd
+    assert "--policy.path=lerobot/smolvla_base" in cmd
     assert "--steps=10" in cmd and "--batch_size=2" in cmd and "--wandb.enable=true" in cmd
     assert cmd[-1] == "--policy.device=cpu"
 
@@ -23,3 +23,22 @@ def test_cli_dry_run_prints_resolved_command():
     )
     assert result.exit_code == 0, result.output
     assert "lerobot-train" in result.output and "--steps=7" in result.output
+
+
+def test_repo_config_trains_from_smolvla_base():
+    from e2l_common.config import load_config
+
+    config = Path(__file__).parents[3] / "configs" / "train" / "smolvla.yaml"
+    cfg = load_config(config, model=TrainConfig)
+    assert cfg.policy_path == "lerobot/smolvla_base"
+
+
+def test_repo_config_maps_libero_cameras_onto_base():
+    from e2l_common.config import load_config
+
+    config = Path(__file__).parents[3] / "configs" / "train" / "smolvla.yaml"
+    cmd = build_command(load_config(config, model=TrainConfig))
+    rename = next(a for a in cmd if a.startswith("--rename_map="))
+    assert '"observation.images.image": "observation.images.camera1"' in rename
+    assert '"observation.images.image2": "observation.images.camera2"' in rename
+    assert "--policy.empty_cameras=1" in cmd

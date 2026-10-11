@@ -130,7 +130,7 @@ class GenerateConfig(_Config):
 
 
 class TrainConfig(_Config):
-    policy_path: str = "HuggingFaceVLA/smolvla_libero"
+    policy_path: str = "lerobot/smolvla_base"
     dataset_repo_id: str = "local/ego2libero"
     dataset_root: Path = Path("data/lerobot/ego2libero")
     output_dir: Path = Path("outputs/train/smolvla")

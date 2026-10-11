@@ -41,6 +41,14 @@ def _libero_env_config(sim_cfg: SimConfig):
     )
 
 
+def checkpoint_rename_map(policy_path: str) -> dict[str, str]:
+    """Camera rename_map a fine-tuned checkpoint was trained with ({} for hub ids / no file)."""
+    train_config = Path(policy_path) / "train_config.json"
+    if not train_config.is_file():
+        return {}
+    return dict(json.loads(train_config.read_text()).get("rename_map") or {})
+
+
 def rollout(
     policy_path: str,
     cfg: EvalConfig,
@@ -72,7 +80,9 @@ def rollout(
 
     env = make_env(env_cfg, n_envs=1)[sim_cfg.suite][sim_cfg.task_id]
     try:
-        policy = make_policy(cfg=policy_cfg, env_cfg=env_cfg)
+        policy = make_policy(
+            cfg=policy_cfg, env_cfg=env_cfg, rename_map=checkpoint_rename_map(policy_path)
+        )
         policy.eval()
         preprocessor, postprocessor = make_pre_post_processors(
             policy_cfg=policy_cfg,

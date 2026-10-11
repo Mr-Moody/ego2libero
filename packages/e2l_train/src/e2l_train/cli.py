@@ -12,11 +12,18 @@ app = typer.Typer(help="LeRobot export and SmolVLA fine-tuning.", no_args_is_hel
 
 @app.command()
 def export(
-    run_ids: list[str] = typer.Argument(None, help="Generated runs to include (default: all)."),
+    run_ids: list[str] = typer.Argument(
+        None,
+        help="Generated runs to include. Default: EVERY run under data/generated (replay, "
+        "scripted50, ...) in one dataset; pass ids explicitly for Run A / Run B.",
+    ),
+    max_episodes: int = typer.Option(
+        None, help="Keep only the first N successful episodes (sorted file order)."
+    ),
     config: Path = config_option("train/smolvla"),
     set_: list[str] = set_option(),
 ) -> None:
-    """Export data/generated/<run_id>/ episodes to a LeRobot dataset."""
+    """Export successful data/generated/<run_id>/ episodes to a LeRobot dataset."""
     from e2l_common.paths import DataPaths
     from e2l_train.export import export_dataset
 
@@ -24,7 +31,8 @@ def export(
     paths = DataPaths.default()
     runs = run_ids or sorted(p.name for p in (paths.root / "generated").glob("*") if p.is_dir())
     episodes = [p for r in runs for p in sorted(paths.generated(r).glob("*.npz"))]
-    export_dataset(episodes, cfg)
+    root = export_dataset(episodes, cfg, max_episodes)
+    typer.echo(f"wrote {root}")
 
 
 @app.command()
