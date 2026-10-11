@@ -7,7 +7,7 @@ from typing import Any, Literal
 
 import numpy as np
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from e2l_common.geometry import make_T, rotvec_to_matrix
 
@@ -157,6 +157,15 @@ class WidePoseConfig(_Config):
     max_tries: int = 20  # draws per reset before falling back to the init state
     settle_tol: float = 0.02  # m, max xy drift / |dz| of any object while settling
     seed_offset: int = 10_000  # wide episode i uses seed + seed_offset + i
+
+    @model_validator(mode="after")
+    def _drawable(self) -> "WidePoseConfig":
+        # the offset sampler rejects draws until one lands in range: an empty range never ends
+        if not (self.min_offset < self.max_offset and self.min_yaw <= self.max_yaw):
+            raise ValueError("wide needs min_offset < max_offset and min_yaw <= max_yaw")
+        if self.max_tries < 1:
+            raise ValueError("wide.max_tries must be at least 1")
+        return self
 
 
 class EvalConfig(_Config):

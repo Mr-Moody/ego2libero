@@ -75,3 +75,17 @@ def test_make_report_without_videos_writes_table_and_chart_only(tmp_path):
     written = make_report(tmp_path / "res", tmp_path / "fig")
     assert sorted(p.name for p in written) == ["results.md", "success_rates.png"]
     assert (tmp_path / "fig" / "success_rates.png").stat().st_size > 0
+
+
+def test_video_next_to_results_wins_over_stale_local_path(tmp_path, monkeypatch):
+    from e2l_eval.report import _video
+
+    _write(tmp_path / "copied", "B", "standard", [True], videos=1)
+    rel = "outputs/eval/B/standard/videos/eval_episode_0.mp4"
+    stale = tmp_path / "cwd" / rel
+    stale.parent.mkdir(parents=True)
+    stale.write_bytes(b"stale video from an earlier local run")
+    monkeypatch.chdir(tmp_path / "cwd")
+    (row,) = load_results(tmp_path / "copied")
+    row["video_paths"] = [rel]  # relative to the cwd of the machine that wrote it
+    assert _video(row, 0) == row["dir"] / "videos" / "eval_episode_0.mp4"

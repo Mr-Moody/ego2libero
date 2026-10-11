@@ -67,3 +67,25 @@ def test_eval_config_wide_defaults_and_overrides(tmp_path):
     path.write_text("runs: {B: outputs/train/b}\n")
     cfg = load_config(path, ["wide.max_offset=0.2"], EvalConfig)
     assert cfg.runs == {"B": "outputs/train/b"} and cfg.wide.max_offset == 0.2
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [{"min_offset": 0.08, "max_offset": 0.08}, {"min_yaw": 1.0, "max_yaw": 0.5}, {"max_tries": 0}],
+)
+def test_wide_config_rejects_ranges_the_sampler_cannot_draw_from(bad):
+    from e2l_common.config import WidePoseConfig
+
+    with pytest.raises(ValidationError):
+        WidePoseConfig(**bad)
+
+
+def test_wide_eval_stays_outside_the_generation_range():
+    from e2l_common.config import EvalConfig, GenerateConfig
+    from e2l_common.paths import repo_root
+
+    configs = repo_root() / "configs"
+    wide = load_config(configs / "eval.yaml", model=EvalConfig).wide
+    gen = load_config(configs / "generate.yaml", model=GenerateConfig)
+    assert wide.min_offset >= gen.xy_range
+    assert wide.min_yaw >= gen.yaw_range

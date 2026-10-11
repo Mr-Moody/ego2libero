@@ -97,10 +97,11 @@ def plot_success_rates(rows: list[dict], path: Path) -> Path:
 
 
 def _video(row: dict, index: int) -> Path | None:
-    """Video `index` of a result, looked up next to its results.json when the recorded path is
-    from another machine or working directory."""
+    """Video `index` of a result: next to its results.json first (results copied from another
+    machine keep their videos there, and recorded paths are relative to that machine's cwd),
+    else the recorded path."""
     recorded = Path(row["video_paths"][index])
-    for p in (recorded, row["dir"] / "videos" / recorded.name):
+    for p in (row["dir"] / "videos" / recorded.name, recorded):
         if p.is_file():
             return p
     return None
