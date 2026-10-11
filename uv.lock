@@ -555,12 +555,14 @@ version = "0.1.0"
 source = { editable = "packages/e2l_retarget" }
 dependencies = [
     { name = "e2l-common", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
+    { name = "e2l-segment", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
     { name = "e2l-sim", marker = "(platform_machine == 'aarch64' and sys_platform == 'linux') or (platform_machine == 'x86_64' and sys_platform == 'linux')" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "e2l-common", editable = "packages/e2l_common" },
+    { name = "e2l-segment", editable = "packages/e2l_segment" },
     { name = "e2l-sim", editable = "packages/e2l_sim" },
 ]
 
