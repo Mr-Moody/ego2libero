@@ -8,7 +8,7 @@ HAND_MODEL_URL := https://storage.googleapis.com/mediapipe-models/hand_landmarke
 E2L := uv run e2l
 
 .PHONY: setup lint format test models gpu smoke normalise perception segment retarget sim-check \
-	worktree generate export finetune baseline eval report
+	worktree generate export finetune baseline eval report rehearsal
 
 ## Environment ------------------------------------------------------------------------------
 setup:            ## install every group (laptop); Spark: uv sync --group train --group dev
@@ -75,3 +75,6 @@ eval:
 
 report:
 	$(E2L) eval report
+
+rehearsal:        ## scripted stand-in demos -> replay, generate, export (COUNT=25 PER_DEMO=16)
+	scripts/rehearsal.sh
