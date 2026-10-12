@@ -1,4 +1,3 @@
-import importlib.util
 import os
 
 import pytest
@@ -7,6 +6,7 @@ from e2l_common.config import GenerateConfig, SimConfig, load_config
 from e2l_common.paths import DataPaths, repo_root
 from e2l_common.schemas import SimEpisode
 from e2l_sim.libero_setup import libero_available
+from e2l_sim.scripted import scripted_segments
 
 pytestmark = [
     pytest.mark.sim,
@@ -17,11 +17,7 @@ DEMO = "20261003_scripted_000"
 
 
 def scripted_demo(root):
-    path = repo_root() / "scripts" / "scripted_segments.py"
-    spec = importlib.util.spec_from_file_location("scripted_segments", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    module.scripted(DEMO).save(DataPaths(root).robot_segments(DEMO))
+    scripted_segments(DEMO).save(DataPaths(root).robot_segments(DEMO))
 
 
 @pytest.mark.parametrize("workers", [1, 2])
