@@ -2,12 +2,14 @@
 # Rehearse everything after retargeting on jittered scripted demos: replay each (Run A source),
 # multiply them (Run B source), export both LeRobot datasets. Rebuilds from scratch on rerun.
 # Spec: docs/superpowers/specs/2026-10-12-scripted-rehearsal-design.md
-#   COUNT=25 PER_DEMO=16 scripts/rehearsal.sh      (make rehearsal)
+#   COUNT=25 PER_DEMO=16 WORKERS=4 scripts/rehearsal.sh      (make rehearsal)
+# Each generate worker renders MuJoCo images; use WORKERS=2 on a 16 GB machine.
 set -euo pipefail
 unset PYTHONPATH
 export MUJOCO_GL="${MUJOCO_GL:-egl}"
 COUNT="${COUNT:-25}"
 PER_DEMO="${PER_DEMO:-16}"
+WORKERS="${WORKERS:-4}"
 e2l() { uv run e2l "$@"; }
 
 uv run python scripts/scripted_segments.py --count "$COUNT"
@@ -20,7 +22,8 @@ done
 ok=$(grep -l '"success": true' data/generated/rehearsal_replay/*.json | wc -l)
 echo "raw replay: $ok / $COUNT succeeded"
 
-e2l generate run "${ids[@]}" --run-id rehearsal_gen --overwrite --set "episodes_per_demo=$PER_DEMO"
+e2l generate run "${ids[@]}" --run-id rehearsal_gen --overwrite --set "episodes_per_demo=$PER_DEMO" \
+  --set "workers=$WORKERS"
 
 e2l train export rehearsal_replay \
   --set dataset_root=data/lerobot/rehearsal_a --set dataset_repo_id=local/rehearsal_a
