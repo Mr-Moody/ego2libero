@@ -1442,10 +1442,10 @@ def make_report(
 
 In `cli.py` `report`, add the option and pass it:
 
-```python
-ablation_dir: Path = (
-    typer.Option(Path("outputs/ablation"), help="Folder of <plan>/plan.json (ablation charts)."),
-)
+```
+    ablation_dir: Path = typer.Option(
+        Path("outputs/ablation"), help="Folder of <plan>/plan.json (ablation charts)."
+    ),
 ```
 
 and call `make_report(results, out_dir, ablation_dir)`.

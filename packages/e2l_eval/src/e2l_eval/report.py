@@ -96,6 +96,56 @@ def plot_success_rates(rows: list[dict], path: Path) -> Path:
     return path
 
 
+def load_plans(ablation_dir: Path) -> list[dict]:
+    """Every `<ablation_dir>/<plan>/plan.json` written by `e2l eval ablate prepare`."""
+    return [json.loads(p.read_text()) for p in sorted(Path(ablation_dir).glob("*/plan.json"))]
+
+
+def plot_ablation(plan: dict, rows: list[dict], path: Path) -> Path | None:
+    """Success rate vs number of source demos, one line per arm (human only / + generated) with
+    95% Wilson error bars, one panel per setting. Only cells with results are drawn; None (and
+    no file) if the plan has none yet."""
+    by_key = {(r["run"], r["setting"]): r for r in rows}
+    points: dict[tuple[str, bool], list[tuple[int, int, int]]] = {}
+    for cell in plan["cells"]:
+        for setting in SETTINGS:
+            row = by_key.get((f"{plan['name']}-{cell['label']}", setting))
+            if row is not None:
+                k, n = sum(row["successes"]), len(row["successes"])
+                points.setdefault((setting, cell["augmented"]), []).append((cell["n_demos"], k, n))
+    if not points:
+        return None
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    fig, axes = plt.subplots(1, len(SETTINGS), figsize=(3.4 * len(SETTINGS), 3.0), sharey=True)
+    for ax, setting in zip(axes, SETTINGS, strict=True):
+        for augmented, name in ((False, "human only"), (True, "human + generated")):
+            pts = sorted(points.get((setting, augmented), []))
+            if not pts:
+                continue
+            xs = [x for x, _, _ in pts]
+            rates = [k / n for _, k, n in pts]
+            bounds = [wilson_interval(k, n) for _, k, n in pts]
+            err = [
+                [r - lo for r, (lo, _) in zip(rates, bounds, strict=True)],
+                [hi - r for r, (_, hi) in zip(rates, bounds, strict=True)],
+            ]
+            ax.errorbar(xs, rates, yerr=err, marker="o", capsize=3, label=name)
+        ax.set_title(setting)
+        ax.set_xlabel("source demos")
+        ax.set_ylim(0, 1.05)
+    axes[0].set_ylabel("success rate")
+    axes[0].legend(frameon=False, fontsize=8)
+    fig.suptitle(f"ablation: {plan['name']}", fontsize=9)
+    fig.tight_layout()
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    return path
+
+
 def _video(row: dict, index: int) -> Path | None:
     """Video `index` of a result: next to its results.json first (results copied from another
     machine keep their videos there, and recorded paths are relative to that machine's cwd),
@@ -173,8 +223,11 @@ def rollout_grid(
     return path
 
 
-def make_report(results_dir: Path, out_dir: Path = Path("docs/figures")) -> list[Path]:
-    """`results.md`, `success_rates.png` and (if any videos) `rollouts.gif` in `out_dir`."""
+def make_report(
+    results_dir: Path, out_dir: Path = Path("docs/figures"), ablation_dir: Path | None = None
+) -> list[Path]:
+    """`results.md`, `success_rates.png`, (if any videos) `rollouts.gif`, and for each plan in
+    `ablation_dir` with evaluated cells an `ablation_<plan>.png`, in `out_dir`."""
     rows = load_results(results_dir)
     if not rows:
         raise FileNotFoundError(f"no <run>/<setting>/results.json under {results_dir}")
@@ -183,4 +236,8 @@ def make_report(results_dir: Path, out_dir: Path = Path("docs/figures")) -> list
     table.write_text(results_table(rows))
     written = [table, plot_success_rates(rows, out_dir / "success_rates.png")]
     gif = rollout_grid(rows, out_dir / "rollouts.gif")
-    return written + ([gif] if gif else [])
+    written += [gif] if gif else []
+    for plan in load_plans(ablation_dir) if ablation_dir else []:
+        chart = plot_ablation(plan, rows, out_dir / f"ablation_{plan['name']}.png")
+        written += [chart] if chart else []
+    return written

@@ -121,9 +121,12 @@ def report(
         Path("outputs/eval"), help="Folder of <run>/<setting>/results.json."
     ),
     out_dir: Path = typer.Option(Path("docs/figures")),
+    ablation_dir: Path = typer.Option(
+        Path("outputs/ablation"), help="Folder of <plan>/plan.json (ablation charts)."
+    ),
 ) -> None:
-    """Results table, success-rate chart and rollout GIF into docs/figures/."""
+    """Results table, success-rate chart, rollout GIF and ablation charts into docs/figures/."""
     from e2l_eval.report import make_report
 
-    for path in make_report(results, out_dir):
+    for path in make_report(results, out_dir, ablation_dir):
         typer.echo(path)

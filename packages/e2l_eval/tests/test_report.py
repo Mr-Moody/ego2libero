@@ -5,7 +5,14 @@ import imageio.v2 as imageio
 import numpy as np
 from PIL import Image
 
-from e2l_eval.report import load_results, make_report, results_table, rollout_grid
+from e2l_eval.report import (
+    load_plans,
+    load_results,
+    make_report,
+    plot_ablation,
+    results_table,
+    rollout_grid,
+)
 
 
 def _write(root: Path, run: str, setting: str, successes, videos=0, placements=(), legacy=False):
@@ -89,3 +96,42 @@ def test_video_next_to_results_wins_over_stale_local_path(tmp_path, monkeypatch)
     (row,) = load_results(tmp_path / "copied")
     row["video_paths"] = [rel]  # relative to the cwd of the machine that wrote it
     assert _video(row, 0) == row["dir"] / "videos" / "eval_episode_0.mp4"
+
+
+def _plan_file(root: Path, name: str = "rehearsal") -> dict:
+    plan = {
+        "name": name,
+        "cells": [
+            {"label": "n05_raw", "n_demos": 5, "augmented": False},
+            {"label": "n05_aug", "n_demos": 5, "augmented": True},
+            {"label": "all_raw", "n_demos": 25, "augmented": False},
+            {"label": "all_aug", "n_demos": 25, "augmented": True},
+        ],
+    }
+    (root / name).mkdir(parents=True)
+    (root / name / "plan.json").write_text(json.dumps(plan))
+    return plan
+
+
+def test_plot_ablation_uses_only_evaluated_cells(tmp_path):
+    plan = _plan_file(tmp_path / "ablation")
+    _write(tmp_path / "res", "rehearsal-all_raw", "standard", [True, False])
+    _write(tmp_path / "res", "rehearsal-all_aug", "wide", [True, True, False])
+    rows = load_results(tmp_path / "res")
+    out = plot_ablation(plan, rows, tmp_path / "a.png")
+    assert out == tmp_path / "a.png" and out.stat().st_size > 0
+    assert plot_ablation(plan, [], tmp_path / "none.png") is None
+    assert not (tmp_path / "none.png").exists()
+
+
+def test_make_report_adds_one_chart_per_plan_with_results(tmp_path):
+    _plan_file(tmp_path / "ablation", "rehearsal")
+    _plan_file(tmp_path / "ablation", "untrained")
+    _write(tmp_path / "res", "rehearsal-all_raw", "standard", [True, False, True])
+    assert [p["name"] for p in load_plans(tmp_path / "ablation")] == ["rehearsal", "untrained"]
+    written = make_report(tmp_path / "res", tmp_path / "fig", tmp_path / "ablation")
+    assert sorted(p.name for p in written) == [
+        "ablation_rehearsal.png",
+        "results.md",
+        "success_rates.png",
+    ]
