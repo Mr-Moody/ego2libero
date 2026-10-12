@@ -50,9 +50,17 @@ grid.
      steps, configs) and `outputs/ablation/<plan>/spark.sh`. `--cells` limits which cells are
      exported, pushed and scripted; `plan.json` still lists every cell of the grid, each with a
      `prepared` flag. A cell whose dataset repo already exists on the Hub is not re-pushed.
+   - `plan.json` and `spark.sh` are uploaded to a small private dataset repo
+     `<ns>/e2l-<plan>-plan`, so the Spark fetches them from the Hub too.
    - `spark.sh` is run by the user in a clone of this repo on the Spark (`git pull`,
-     `uv sync --group train --group dev` first): one `e2l train finetune` per prepared cell, in
-     order, each pushing its checkpoint. It stops at the first failure (`set -euo pipefail`).
+     `uv sync --group train --group dev`, `uv run hf download <ns>/e2l-<plan>-plan
+     --repo-type dataset --local-dir outputs/ablation/<plan>` first): one `e2l train finetune`
+     per prepared cell, in order, each pushing its checkpoint. A cell whose
+     `outputs/train/<plan>-<cell>` already exists is skipped with a message (delete it to
+     retrain), so a rerun after a failure resumes. It stops at the first failure
+     (`set -euo pipefail`).
+   - An augmented cell with no successful generated episodes for its demos is an error at
+     prepare time (it would silently equal the raw cell).
    - `e2l eval ablate evaluate <plan>` runs, for every prepared cell whose policy repo exists on
      the Hub and whose `outputs/eval/<plan>-<cell>/<setting>/results.json` is missing,
      `rollout(..., setting)` for `standard` and `wide`. Cells not yet trained are listed as
@@ -91,7 +99,7 @@ grid.
 | `e2l_train/finetune.py` | Hub dataset (no root) and push flags in `build_command` / `launch` |
 | `e2l_train/export.py` | unchanged API; `prepare` calls `export_dataset` with an episode list |
 | `e2l_eval/ablation.py` | `Cell`, `eligible_demos`, `select_cells`, `prepare`, `spark_script`, `evaluate` |
-| `e2l_eval/hub.py` (new) | thin wrappers: `namespace`, `repo_exists`, `push_dataset`, `download_policy` (lazy `huggingface_hub` / LeRobot imports) |
+| `e2l_eval/hub.py` (new) | thin wrappers: `namespace`, `repo_exists`, `push_dataset`, `push_folder`, `download_policy` (lazy `huggingface_hub` / LeRobot imports) |
 | `e2l_eval/cli.py` | `ablate prepare`, `ablate evaluate` (replaces `ablate`) |
 | `e2l_eval/report.py` | `plot_ablation`; called from `make_report` per plan |
 | `CLAUDE.md` | ablation commands |
