@@ -13,7 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
-from e2l_common.config import AblationConfig, EvalConfig, TrainConfig
+from e2l_common.config import AblationConfig, EvalConfig, SimConfig, TrainConfig
 from e2l_common.paths import DataPaths
 from e2l_eval import hub
 from e2l_train.export import export_dataset
@@ -182,3 +182,44 @@ def spark_script(plan: dict) -> str:
             "fi",
         ]
     return "\n".join(lines) + "\n"
+
+
+def evaluate(
+    cfg: EvalConfig, sim_cfg: SimConfig, plan_path: Path, videos: int = 3
+) -> dict[str, str]:
+    """For each prepared cell whose checkpoint is on the Hub, run every setting that has no
+    results.json yet under cfg.output_dir/<plan>-<cell>/<setting>/. Returns label -> status:
+    done (all settings present), evaluated, pending (no checkpoint yet), not prepared."""
+    from e2l_eval import rollout as rollout_module
+
+    plan = json.loads(Path(plan_path).read_text())
+    status = {}
+    for row in plan["cells"]:
+        label, run = row["label"], f"{plan['name']}-{row['label']}"
+        if not row["prepared"]:
+            status[label] = "not prepared"
+            continue
+        todo = [
+            s
+            for s in rollout_module.SETTINGS
+            if not (cfg.output_dir / run / s / "results.json").is_file()
+        ]
+        if not todo:
+            status[label] = "done"
+            continue
+        if not hub.repo_exists(row["policy_repo"], "model"):
+            status[label] = "pending"
+            continue
+        policy = hub.download_policy(row["policy_repo"])
+        for setting in todo:
+            rollout_module.rollout(
+                str(policy),
+                cfg,
+                sim_cfg,
+                cfg.output_dir / run / setting,
+                max_videos=videos,
+                setting=setting,
+                run=run,
+            )
+        status[label] = "evaluated"
+    return status

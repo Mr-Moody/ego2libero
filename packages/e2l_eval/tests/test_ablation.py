@@ -222,3 +222,57 @@ def test_spark_script_skips_existing_output_dirs(tmp_path, fake_hub):
     out = subprocess.run(["bash", "-c", script], cwd=work, capture_output=True, text=True)
     assert out.returncode == 0, out.stderr
     assert "TRAIN" not in out.stdout and "skip rehearsal-all_raw" in out.stdout
+
+
+def _plan(tmp_path: Path) -> Path:
+    plan = {
+        "name": "rehearsal",
+        "cells": [
+            {"label": "all_raw", "prepared": True, "policy_repo": "me/raw-policy"},
+            {"label": "all_aug", "prepared": True, "policy_repo": "me/aug-policy"},
+            {"label": "n05_raw", "prepared": True, "policy_repo": "me/n05-policy"},
+            {"label": "n05_aug", "prepared": False, "policy_repo": "me/x-policy"},
+        ],
+    }
+    path = tmp_path / "plan.json"
+    path.write_text(json.dumps(plan))
+    return path
+
+
+def test_evaluate_skips_done_and_pending_cells(tmp_path, monkeypatch):
+    import e2l_eval.rollout as rollout_module
+    from e2l_common.config import SimConfig
+
+    cfg = EvalConfig(output_dir=tmp_path / "eval")
+    done = cfg.output_dir / "rehearsal-all_raw"
+    for s in ("standard", "wide"):
+        (done / s).mkdir(parents=True)
+        (done / s / "results.json").write_text("{}")
+    (cfg.output_dir / "rehearsal-n05_raw" / "standard").mkdir(parents=True)
+    (cfg.output_dir / "rehearsal-n05_raw" / "standard" / "results.json").write_text("{}")
+    monkeypatch.setattr(hub, "repo_exists", lambda repo, kind="model": repo != "me/aug-policy")
+    monkeypatch.setattr(hub, "download_policy", lambda repo: tmp_path / "snap" / repo)
+    calls = []
+    monkeypatch.setattr(
+        rollout_module,
+        "rollout",
+        lambda policy, c, s, out, max_videos, setting, run: calls.append(
+            (policy, out, max_videos, setting, run)
+        ),
+    )
+    status = ablation.evaluate(cfg, SimConfig(), _plan(tmp_path), videos=2)
+    assert status == {
+        "all_raw": "done",
+        "all_aug": "pending",
+        "n05_raw": "evaluated",
+        "n05_aug": "not prepared",
+    }
+    assert calls == [
+        (
+            str(tmp_path / "snap" / "me/n05-policy"),
+            cfg.output_dir / "rehearsal-n05_raw" / "wide",
+            2,
+            "wide",
+            "rehearsal-n05_raw",
+        )
+    ]

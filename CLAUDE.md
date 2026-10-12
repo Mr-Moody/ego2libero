@@ -21,6 +21,10 @@ one pydantic model each in `e2l_common.config`; override with `--set key.sub=val
   `uv run e2l sim replay 20261003_scripted_000 --video` (should print `success=True`)
 - Rehearsal without demos: `make rehearsal` (25 jittered scripted demos → `rehearsal_replay`,
   `rehearsal_gen`, datasets `lerobot/rehearsal_{a,b}`, all under its own root `data/rehearsal/`)
+- Ablation / Run A·B via the Spark (Hub login on both): `uv run e2l eval ablate prepare
+  [--cells all_raw,all_aug]` → run the printed `spark.sh` steps on the Spark →
+  `uv run e2l eval ablate evaluate <plan>`. Rehearsal: one `--set` each for `ablation.name=rehearsal`,
+  `ablation.data_root=data/rehearsal`, `ablation.replay_run=rehearsal_replay`, `ablation.generated_run=rehearsal_gen`
 - `uv run python scripts/make_markers.py` · `uv run python scripts/calibrate_phone.py <video>`
 
 ## Conventions (enforced by tests)

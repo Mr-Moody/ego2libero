@@ -69,12 +69,50 @@ def rollout(
     )
 
 
-@app.command()
-def ablate(config: Path = config_option("eval"), set_: list[str] = set_option()) -> None:
-    """Sweep demo count x augmentation."""
-    from e2l_eval.ablation import run_ablation
+ablate_app = typer.Typer(
+    help="Demo count x augmentation sweep, trained on the DGX Spark via the Hub.",
+    no_args_is_help=True,
+)
+app.add_typer(ablate_app, name="ablate")
 
-    run_ablation(load_stage_config(config, set_, EvalConfig))
+
+@ablate_app.command("prepare")
+def ablate_prepare(
+    cells: str = typer.Option(None, help="Comma-separated cell labels (default: every cell)."),
+    config: Path = config_option("eval"),
+    train_config: Path = typer.Option(Path("configs/train/smolvla.yaml"), help="Train config."),
+    set_: list[str] = set_option(),
+) -> None:
+    """Export + push each cell's dataset; write and push plan.json and spark.sh."""
+    from e2l_common.config import TrainConfig, load_config
+    from e2l_eval.ablation import prepare
+
+    cfg = load_stage_config(config, set_, EvalConfig)
+    only = [c.strip() for c in cells.split(",")] if cells else None
+    plan = prepare(cfg, load_config(train_config, model=TrainConfig), only)
+    typer.echo(f"wrote {plan} and {plan.parent / 'spark.sh'}")
+    typer.echo((plan.parent / "spark.sh").read_text().split("set -euo")[0])
+
+
+@ablate_app.command("evaluate")
+def ablate_evaluate(
+    plan: str = typer.Argument(..., help="Plan name: outputs/ablation/<plan>/plan.json."),
+    videos: int = typer.Option(3, help="Episodes per setting to save as mp4."),
+    config: Path = config_option("eval"),
+    sim_config: Path = SIM_CONFIG,
+    set_: list[str] = set_option(),
+) -> None:
+    """Evaluate every trained cell of a plan on standard and wide; rerun as cells finish."""
+    from e2l_common.config import load_config
+    from e2l_eval.ablation import PLAN_ROOT, evaluate
+
+    plan_path = PLAN_ROOT / plan / "plan.json"
+    if not plan_path.is_file():
+        raise typer.BadParameter(f"no {plan_path}; run `e2l eval ablate prepare`")
+    cfg = load_stage_config(config, set_, EvalConfig)
+    status = evaluate(cfg, load_config(sim_config, model=SimConfig), plan_path, videos)
+    for label, state in status.items():
+        typer.echo(f"{label:10s} {state}")
 
 
 @app.command()
