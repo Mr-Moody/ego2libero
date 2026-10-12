@@ -62,6 +62,8 @@ def export_dataset(
 ) -> Path:
     """Write the successful episodes among `episode_paths` (at most `max_episodes`) to a new
     LeRobot dataset at `cfg.dataset_root`. Refuses to touch an existing directory."""
+    if cfg.dataset_root is None:
+        raise ValueError("export needs a local dataset_root to write to")
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
     if cfg.dataset_root.exists():

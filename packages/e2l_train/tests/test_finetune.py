@@ -42,3 +42,38 @@ def test_repo_config_maps_libero_cameras_onto_base():
     assert '"observation.images.image": "observation.images.camera1"' in rename
     assert '"observation.images.image2": "observation.images.camera2"' in rename
     assert "--policy.empty_cameras=1" in cmd
+
+
+def test_build_command_trains_from_hub_and_pushes_checkpoint():
+    cfg = TrainConfig(
+        dataset_root=None,
+        dataset_repo_id="me/e2l-x-all_raw",
+        push_repo_id="me/e2l-x-all_raw-policy",
+    )
+    cmd = build_command(cfg)
+    assert "--dataset.repo_id=me/e2l-x-all_raw" in cmd
+    assert not any(a.startswith("--dataset.root") for a in cmd)
+    assert "--policy.push_to_hub=true" in cmd
+    assert "--policy.repo_id=me/e2l-x-all_raw-policy" in cmd
+    assert "--policy.private=true" in cmd
+    assert "--policy.push_to_hub=false" not in cmd
+
+
+def test_build_command_without_push_is_unchanged():
+    cmd = build_command(TrainConfig())
+    assert "--policy.push_to_hub=false" in cmd
+    assert not any(a.startswith(("--policy.repo_id", "--policy.private")) for a in cmd)
+    assert "--dataset.root=data/lerobot/ego2libero" in cmd
+
+
+def test_launch_from_hub_skips_local_dataset_check(tmp_path, monkeypatch):
+    import subprocess
+
+    from e2l_train import finetune
+
+    calls = []
+    monkeypatch.setattr(finetune.shutil, "which", lambda _: "/bin/lerobot-train")
+    monkeypatch.setattr(subprocess, "run", lambda cmd, check: calls.append(cmd))
+    cfg = TrainConfig(dataset_root=None, output_dir=tmp_path / "out")
+    finetune.launch(cfg)
+    assert calls and calls[0][0] == "/bin/lerobot-train"

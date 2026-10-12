@@ -126,3 +126,8 @@ def test_export_bad_camera_names_file_and_creates_nothing(tmp_path):
     with pytest.raises(ValueError, match="bad.npz.*256"):
         export_dataset(paths, cfg)
     assert not cfg.dataset_root.exists()
+
+
+def test_export_needs_a_local_dataset_root(tmp_path):
+    with pytest.raises(ValueError, match="dataset_root"):
+        export_dataset([tmp_path / "x.npz"], TrainConfig(dataset_root=None))
