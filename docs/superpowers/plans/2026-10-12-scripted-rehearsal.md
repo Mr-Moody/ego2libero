@@ -87,9 +87,7 @@ R_TOP_DOWN = np.diag([1.0, -1.0, -1.0])
 
 
 def _draws(n: int = 200) -> list[RobotSegments]:
-    return [
-        scripted_segments(scripted_demo_id(1), np.random.default_rng([7, i])) for i in range(n)
-    ]
+    return [scripted_segments(scripted_demo_id(1), np.random.default_rng([7, i])) for i in range(n)]
 
 
 def test_nominal_demo_matches_the_original_script():
@@ -97,7 +95,9 @@ def test_nominal_demo_matches_the_original_script():
     assert [s.ref_object for s in segs] == ["bowl", "plate", "plate"]
     assert [len(s.T_obj_ee) for s in segs] == [30, 30, 20]
     for s in segs:
-        np.testing.assert_array_equal(s.T_obj_ee[:, :3, :3], np.broadcast_to(R_TOP_DOWN, (len(s.T_obj_ee), 3, 3)))
+        np.testing.assert_array_equal(
+            s.T_obj_ee[:, :3, :3], np.broadcast_to(R_TOP_DOWN, (len(s.T_obj_ee), 3, 3))
+        )
     np.testing.assert_allclose(segs[0].T_obj_ee[0, :3, 3], [0.05, 0.0, 0.145])
     np.testing.assert_allclose(segs[0].T_obj_ee[-1, :3, 3], [0.05, 0.0, 0.045])
     np.testing.assert_allclose(segs[1].T_obj_ee[0, :3, 3], [0.05, 0.0, 0.225])
@@ -140,7 +140,9 @@ def test_jitter_stays_in_bounds():
         for seg, nominal in zip(demo.segments, (30, 30, 20), strict=True):
             assert round(0.7 * nominal) - 1 <= len(seg.T_obj_ee) <= round(1.3 * nominal) + 1
             # grip-site z axis points straight down; fingers close radially at the grasp angle
-            np.testing.assert_allclose(seg.T_obj_ee[:, :3, 2], np.tile([0, 0, -1.0], (len(seg.T_obj_ee), 1)), atol=1e-12)
+            np.testing.assert_allclose(
+                seg.T_obj_ee[:, :3, 2], np.tile([0, 0, -1.0], (len(seg.T_obj_ee), 1)), atol=1e-12
+            )
             np.testing.assert_allclose(seg.T_obj_ee[0, :2, 0], [np.cos(angle), np.sin(angle)])
 
 
@@ -489,6 +491,7 @@ def replay(
     if not _RUN_ID.match(run_id):
         raise typer.BadParameter(f"{run_id!r} is not a single folder name", param_hint="--run-id")
     import numpy as np
+
     ...
     npz, _ = episode.save(paths.generated(run_id, demo_id))
 ```
