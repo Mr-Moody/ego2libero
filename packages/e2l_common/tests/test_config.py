@@ -1,8 +1,18 @@
+from pathlib import Path
+
 import numpy as np
 import pytest
 from pydantic import ValidationError
 
-from e2l_common.config import Pose, SegmentConfig, SimConfig, load_config
+from e2l_common.config import (
+    AblationConfig,
+    EvalConfig,
+    Pose,
+    SegmentConfig,
+    SimConfig,
+    TrainConfig,
+    load_config,
+)
 
 
 def write(tmp_path, name, text):
@@ -89,3 +99,52 @@ def test_wide_eval_stays_outside_the_generation_range():
     gen = load_config(configs / "generate.yaml", model=GenerateConfig)
     assert wide.min_offset >= gen.xy_range
     assert wide.min_yaw >= gen.yaw_range
+
+
+def test_ablation_defaults_describe_the_real_run():
+    ab = EvalConfig().ablation
+    assert ab.demo_counts == [5, 10, "all"]
+    assert ab.augmentation == [False, True]
+    assert (ab.data_root, ab.replay_run, ab.generated_run) == (Path("data"), "replay", "run0")
+    assert ab.private and ab.hub_namespace is None
+
+
+def test_ablation_overrides_from_cli_strings(tmp_path):
+    path = tmp_path / "eval.yaml"
+    path.write_text("ablation:\n  name: rehearsal\n")
+    cfg = load_config(
+        path,
+        [
+            "ablation.demo_counts=[3, all]",
+            "ablation.data_root=data/rehearsal",
+            "ablation.steps=200",
+        ],
+        model=EvalConfig,
+    )
+    assert cfg.ablation.name == "rehearsal"
+    assert cfg.ablation.demo_counts == [3, "all"]
+    assert cfg.ablation.data_root == Path("data/rehearsal")
+    assert cfg.ablation.steps == 200
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"name": "Has Space"},
+        {"name": ""},
+        {"demo_counts": []},
+        {"demo_counts": [0]},
+        {"demo_counts": ["most"]},
+        {"augmentation": []},
+        {"steps": 0},
+    ],
+)
+def test_ablation_rejects_bad_values(bad):
+    with pytest.raises(ValidationError):
+        AblationConfig(**bad)
+
+
+def test_train_config_hub_fields_default_off():
+    cfg = TrainConfig()
+    assert cfg.push_repo_id is None and cfg.private is True
+    assert TrainConfig(dataset_root=None).dataset_root is None

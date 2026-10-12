@@ -9,8 +9,17 @@ n_episodes: 50                               # per evaluated policy
 seed: 1000                                   # episode i uses seed + i
 output_dir: outputs/eval
 device: cuda
-demo_counts: [5, 10, 20, 40]                 # number of human demos in the ablation sweep
-augmentation: [false, true]                  # without / with demo multiplication
+ablation:                                    # e2l eval ablate prepare | evaluate
+  name: real                                 # plan id: outputs/ablation/<name>/, Hub e2l-<name>-<cell>
+  data_root: data                            # rehearsal: data/rehearsal
+  replay_run: replay                         # raw replays (Run A source); rehearsal: rehearsal_replay
+  generated_run: run0                        # multiplied episodes; rehearsal: rehearsal_gen
+  demo_counts: [5, 10, all]                  # nested demo subsets; all = Run A / Run B
+  augmentation: [false, true]                # raw replays only / plus generated episodes
+  subset_seed: 0
+  steps: 20000                               # per cell; set from the Spark smoke run's speed
+  hub_namespace: null                        # null: the logged-in Hugging Face user
+  private: true
 
 wide:                                        # --setting wide: task objects moved after reset
   min_offset: 0.08                           # m; offsets inside +/- this square are rejected (= generate xy_range)

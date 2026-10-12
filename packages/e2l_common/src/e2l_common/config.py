@@ -1,6 +1,7 @@
 """One pydantic model per stage config in `configs/`. CLI flags override YAML through
 `load_config(path, overrides)`, where overrides are `key.sub=value` strings or a dict."""
 
+import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
@@ -13,6 +14,7 @@ from e2l_common.geometry import make_T, rotvec_to_matrix
 
 __all__ = [
     "CONFIG_MODELS",
+    "AblationConfig",
     "CaptureConfig",
     "EvalConfig",
     "GenerateConfig",
@@ -135,13 +137,15 @@ class GenerateConfig(_Config):
 class TrainConfig(_Config):
     policy_path: str = "lerobot/smolvla_base"
     dataset_repo_id: str = "local/ego2libero"
-    dataset_root: Path = Path("data/lerobot/ego2libero")
+    dataset_root: Path | None = Path("data/lerobot/ego2libero")  # None: dataset_repo_id on Hub
     output_dir: Path = Path("outputs/train/smolvla")
     steps: int = 20000
     batch_size: int = 32
     num_workers: int = 4
     save_freq: int = 5000
     wandb: bool = False
+    push_repo_id: str | None = None  # push the final checkpoint to this Hub model repo
+    private: bool = True  # Hub visibility of push_repo_id
     extra_args: list[str] = Field(default_factory=list)
 
 
@@ -168,6 +172,34 @@ class WidePoseConfig(_Config):
         return self
 
 
+class AblationConfig(_Config):
+    """Demo count x augmentation sweep (`e2l eval ablate`); Run A / Run B are its `all` cells.
+    Defaults describe the real run; the rehearsal overrides name, data_root and the run ids."""
+
+    name: str = "real"  # plan id: outputs/ablation/<name>/, Hub repos e2l-<name>-<cell>
+    data_root: Path = Path("data")  # E2L data root holding replay_run and generated_run
+    replay_run: str = "replay"  # data/generated/<replay_run>: raw replays (Run A source)
+    generated_run: str = "run0"  # data/generated/<generated_run>: multiplied episodes
+    demo_counts: list[int | Literal["all"]] = Field(default_factory=lambda: [5, 10, "all"])
+    augmentation: list[bool] = Field(default_factory=lambda: [False, True])
+    subset_seed: int = 0  # one shuffle of the eligible demos; cell n takes the first n
+    steps: int = 20000  # training steps, the same for every cell
+    hub_namespace: str | None = None  # None: the logged-in Hugging Face user
+    private: bool = True
+
+    @model_validator(mode="after")
+    def _check(self) -> "AblationConfig":
+        if not re.fullmatch(r"[a-z0-9][a-z0-9-]*", self.name):
+            raise ValueError(f"ablation.name {self.name!r}: lowercase letters, digits and '-'")
+        if not self.demo_counts or not self.augmentation:
+            raise ValueError("ablation needs at least one demo count and one augmentation flag")
+        if any(c != "all" and c < 1 for c in self.demo_counts):
+            raise ValueError("ablation.demo_counts must be positive or 'all'")
+        if self.steps < 1:
+            raise ValueError("ablation.steps must be at least 1")
+        return self
+
+
 class EvalConfig(_Config):
     policy_path: str = "HuggingFaceVLA/smolvla_libero"
     runs: dict[str, str] = Field(
@@ -178,8 +210,7 @@ class EvalConfig(_Config):
     output_dir: Path = Path("outputs/eval")
     device: str = "cuda"
     wide: WidePoseConfig = Field(default_factory=WidePoseConfig)
-    demo_counts: list[int] = Field(default_factory=lambda: [5, 10, 20, 40])
-    augmentation: list[bool] = Field(default_factory=lambda: [False, True])
+    ablation: AblationConfig = Field(default_factory=AblationConfig)
 
 
 CONFIG_MODELS: dict[str, type[BaseModel]] = {
