@@ -1,4 +1,3 @@
-import importlib.util
 import os
 
 import numpy as np
@@ -10,6 +9,7 @@ from e2l_common.paths import repo_root
 from e2l_common.schemas import HandSegment, HandSegments, RobotSegments
 from e2l_retarget.hand_to_ee import retarget_segments
 from e2l_sim.libero_setup import libero_available
+from e2l_sim.scripted import scripted_segments
 
 # Hand axes in the object frame: fingers along +y, palm down, knuckle axis (hand y) along x.
 R_HAND = np.array([[0.0, 1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, -1.0]])
@@ -17,11 +17,7 @@ CFG = RetargetConfig(T_hand_ee=Pose(xyz=(0.09, 0.0, 0.02)), closing_axis=(0.0, 1
 
 
 def _scripted() -> RobotSegments:
-    path = repo_root() / "scripts" / "scripted_segments.py"
-    spec = importlib.util.spec_from_file_location("scripted_segments", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module.scripted("20261011_retarget_000")
+    return scripted_segments("20261011_retarget_000")
 
 
 def _as_hand(robot: RobotSegments) -> HandSegments:

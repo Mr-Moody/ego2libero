@@ -76,17 +76,12 @@ def test_save_video_round_trip(tmp_path):
 @pytest.mark.slow
 @pytest.mark.skipif(not libero_available(), reason="needs LIBERO and its assets")
 def test_scripted_bowl_onto_plate_succeeds():
-    """The hand-designed demo in scripts/scripted_segments.py solves the chosen task."""
-    import importlib.util
-
+    """The nominal scripted demo (e2l_sim.scripted) solves the chosen task."""
     os.environ.setdefault("MUJOCO_GL", "egl")
     from e2l_sim.replay import replay
+    from e2l_sim.scripted import scripted_segments
 
-    path = repo_root() / "scripts" / "scripted_segments.py"
-    spec = importlib.util.spec_from_file_location("scripted_segments", path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    segments: RobotSegments = module.scripted("20261003_scripted_000")
+    segments: RobotSegments = scripted_segments("20261003_scripted_000")
 
     cfg = load_config(repo_root() / "configs" / "sim.yaml", model=SimConfig)
     episode = replay(segments, cfg)

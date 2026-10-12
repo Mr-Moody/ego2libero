@@ -19,6 +19,8 @@ one pydantic model each in `e2l_common.config`; override with `--set key.sub=val
 - `uv run e2l eval rollout --run reference --setting wide` · `uv run e2l eval report` (→ docs/figures)
 - Replay check without perception: `uv run python scripts/scripted_segments.py`, then
   `uv run e2l sim replay 20261003_scripted_000 --video` (should print `success=True`)
+- Rehearsal without demos: `make rehearsal` (25 jittered scripted demos → `rehearsal_replay`,
+  `rehearsal_gen`, datasets `lerobot/rehearsal_{a,b}`, all under its own root `data/rehearsal/`)
 - `uv run python scripts/make_markers.py` · `uv run python scripts/calibrate_phone.py <video>`
 
 ## Conventions (enforced by tests)
