@@ -13,10 +13,12 @@ def namespace(configured: str | None) -> str:
     return whoami()["name"]
 
 
-def repo_exists(repo_id: str, repo_type: str = "model") -> bool:
+def has_file(repo_id: str, filename: str, repo_type: str = "model") -> bool:
+    """Whether `filename` is in the repo. A push is one commit after `create_repo`, so a failed
+    push leaves the repo without its key file; checking the file, not the repo, catches that."""
     from huggingface_hub import HfApi
 
-    return HfApi().repo_exists(repo_id, repo_type=repo_type)
+    return HfApi().file_exists(repo_id, filename, repo_type=repo_type)
 
 
 def push_dataset(root: Path, repo_id: str, private: bool) -> None:

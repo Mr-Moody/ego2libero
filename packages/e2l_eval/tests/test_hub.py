@@ -14,8 +14,8 @@ def test_namespace_prefers_config_then_logged_in_user(monkeypatch):
 class _Api:
     calls: list = []
 
-    def repo_exists(self, repo_id, repo_type=None):
-        _Api.calls.append(("exists", repo_id, repo_type))
+    def file_exists(self, repo_id, filename, repo_type=None):
+        _Api.calls.append(("file", repo_id, filename, repo_type))
         return repo_id.endswith("yes")
 
     def create_repo(self, repo_id, repo_type=None, private=None, exist_ok=False):
@@ -25,13 +25,14 @@ class _Api:
         _Api.calls.append(("upload", repo_id, folder_path, repo_type))
 
 
-def test_repo_exists_and_push_folder_use_dataset_type(monkeypatch, tmp_path):
+def test_has_file_and_push_folder_use_dataset_type(monkeypatch, tmp_path):
     _Api.calls = []
     monkeypatch.setattr(huggingface_hub, "HfApi", _Api)
-    assert hub.repo_exists("a/yes", "dataset") and not hub.repo_exists("a/no")
+    assert hub.has_file("a/yes", "meta/info.json", "dataset")
+    assert not hub.has_file("a/no", "config.json")
     hub.push_folder(tmp_path, "a/e2l-x-plan", private=True)
-    assert ("exists", "a/yes", "dataset") in _Api.calls
-    assert ("exists", "a/no", "model") in _Api.calls
+    assert ("file", "a/yes", "meta/info.json", "dataset") in _Api.calls
+    assert ("file", "a/no", "config.json", "model") in _Api.calls
     assert ("create", "a/e2l-x-plan", "dataset", True, True) in _Api.calls
     assert ("upload", "a/e2l-x-plan", str(tmp_path), "dataset") in _Api.calls
 

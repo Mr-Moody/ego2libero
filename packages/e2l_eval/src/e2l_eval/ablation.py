@@ -93,8 +93,10 @@ def prepare(
     plan_root: Path = PLAN_ROOT,
 ) -> Path:
     """Export and push the datasets of the selected cells (`only`, default all), then write and
-    push plan.json + spark.sh. An existing local export is reused (delete it to rebuild) and a
-    dataset repo already on the Hub is not pushed again. Returns the plan.json path."""
+    push plan.json + spark.sh. An existing local export is reused if it holds every episode of
+    the cell (delete it to rebuild) and a dataset already on the Hub is not pushed again. Cells
+    prepared by an earlier run with the same `ablation` settings stay prepared. Returns the
+    plan.json path."""
     ab = cfg.ablation
     cells = select_cells(ab)
     labels = [c.label for c in cells]
@@ -102,6 +104,8 @@ def prepare(
     unknown = [c for c in chosen if c not in labels]
     if unknown:
         raise ValueError(f"unknown cells {unknown}; this plan has {labels}")
+    out = plan_root / ab.name
+    earlier = _earlier_prepared(out / "plan.json", ab)
     ns = hub.namespace(ab.hub_namespace)
     data = DataPaths(ab.data_root)
     rows = []
@@ -116,15 +120,22 @@ def prepare(
             "frames": None,
             "dataset_repo": dataset_repo,
             "policy_repo": policy_repo,
-            "prepared": cell.label in chosen,
+            "prepared": cell.label in chosen or cell.label in earlier,
         }
         if row["prepared"]:
             root = data.root / "lerobot" / f"{ab.name}-{cell.label}"
             if not root.exists():
                 update = {"dataset_root": root, "dataset_repo_id": dataset_repo}
                 export_dataset(list(cell.episodes), train_cfg.model_copy(update=update))
-            row["frames"] = json.loads((root / "meta" / "info.json").read_text())["total_frames"]
-            if not hub.repo_exists(dataset_repo, "dataset"):
+            info = json.loads((root / "meta" / "info.json").read_text())
+            if info["total_episodes"] != len(cell.episodes):
+                raise ValueError(
+                    f"{root} has {info['total_episodes']} episodes but cell {cell.label} has "
+                    f"{len(cell.episodes)} (interrupted export or changed settings); delete it "
+                    "to rebuild"
+                )
+            row["frames"] = info["total_frames"]
+            if not hub.has_file(dataset_repo, "meta/info.json", "dataset"):
                 hub.push_dataset(root, dataset_repo, ab.private)
         rows.append(row)
     plan = {
@@ -137,7 +148,6 @@ def prepare(
         "ablation": ab.model_dump(mode="json"),
         "cells": rows,
     }
-    out = plan_root / ab.name
     out.mkdir(parents=True, exist_ok=True)
     (out / "plan.json").write_text(json.dumps(plan, indent=2))
     (out / "spark.sh").write_text(spark_script(plan))
@@ -145,9 +155,20 @@ def prepare(
     return out / "plan.json"
 
 
+def _earlier_prepared(plan_path: Path, ab: AblationConfig) -> set[str]:
+    """Labels prepared by an earlier `prepare` of this plan with identical ablation settings."""
+    if not plan_path.is_file():
+        return set()
+    plan = json.loads(plan_path.read_text())
+    if plan["ablation"] != ab.model_dump(mode="json"):
+        return set()
+    return {row["label"] for row in plan["cells"] if row["prepared"]}
+
+
 def spark_script(plan: dict) -> str:
     """Bash for the DGX Spark: one `e2l train finetune` per prepared cell, training from the
-    cell's Hub dataset and pushing the checkpoint; cells with an output dir are skipped."""
+    cell's Hub dataset and pushing the checkpoint. A finished cell (done marker) is skipped; an
+    output dir without the marker is a crashed run and stops the script until it is deleted."""
     name = plan["name"]
     private = str(plan["ablation"]["private"]).lower()
     lines = [
@@ -174,11 +195,16 @@ def spark_script(plan: dict) -> str:
             "private": private,
         }
         args = " ".join(f"--set {shlex.quote(f'{k}={v}')}" for k, v in sets.items())
+        out = f"outputs/train/{run}"
         lines += [
-            f"if [ -d outputs/train/{run} ]; then",
-            f"  echo 'skip {run}: outputs/train/{run} exists (delete it to retrain)'",
+            f"if [ -f {out}/.e2l-done ]; then",
+            f"  echo 'skip {run}: already trained and pushed (delete {out} to retrain)'",
+            f"elif [ -d {out} ]; then",
+            f"  echo 'partial run in {out}: delete it to retrain' >&2",
+            "  exit 1",
             "else",
             f"  uv run e2l train finetune {args}",
+            f"  touch {out}/.e2l-done",
             "fi",
         ]
     return "\n".join(lines) + "\n"
@@ -207,7 +233,7 @@ def evaluate(
         if not todo:
             status[label] = "done"
             continue
-        if not hub.repo_exists(row["policy_repo"], "model"):
+        if not hub.has_file(row["policy_repo"], "config.json", "model"):
             status[label] = "pending"
             continue
         policy = hub.download_policy(row["policy_repo"])

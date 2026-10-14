@@ -107,9 +107,14 @@ def test_augmented_cell_without_generated_episodes_is_an_error(tmp_path):
 @pytest.fixture
 def fake_hub(monkeypatch):
     """Offline Hub + export: records pushes; export writes only meta/info.json."""
-    state = {"existing": set(), "pushed": [], "folders": [], "exports": []}
+    state = {"existing": set(), "pushed": [], "folders": [], "exports": [], "checked": []}
     monkeypatch.setattr(hub, "namespace", lambda configured: configured or "me")
-    monkeypatch.setattr(hub, "repo_exists", lambda repo, kind="model": repo in state["existing"])
+
+    def has_file(repo, filename, repo_type="model"):
+        state["checked"].append((repo, filename, repo_type))
+        return repo in state["existing"]
+
+    monkeypatch.setattr(hub, "has_file", has_file)
     monkeypatch.setattr(
         hub, "push_dataset", lambda root, repo, private: state["pushed"].append((repo, private))
     )
@@ -178,8 +183,36 @@ def test_prepare_reuses_export_and_skips_existing_repo(tmp_path, fake_hub):
         _eval_cfg(tmp_path), TrainConfig(), ["all_raw"], plan_root=tmp_path / "p"
     )
     assert len(fake_hub["exports"]) == 1 and len(fake_hub["pushed"]) == 1
+    assert ("me/e2l-rehearsal-all_raw", "meta/info.json", "dataset") in fake_hub["checked"]
     cells = {c["label"]: c for c in json.loads(plan_path.read_text())["cells"]}
     assert cells["all_raw"]["frames"] == 50
+
+
+def test_prepare_rejects_a_partial_export(tmp_path, fake_hub):
+    _data(tmp_path)
+    meta = tmp_path / "lerobot" / "rehearsal-all_raw" / "meta"
+    meta.mkdir(parents=True)
+    (meta / "info.json").write_text(json.dumps({"total_episodes": 2, "total_frames": 20}))
+    with pytest.raises(ValueError, match=r"2 episodes.*5.*delete"):
+        ablation.prepare(_eval_cfg(tmp_path), TrainConfig(), ["all_raw"], plan_root=tmp_path / "p")
+    assert fake_hub["pushed"] == []
+
+
+def test_prepare_keeps_cells_prepared_by_an_earlier_run(tmp_path, fake_hub):
+    _data(tmp_path)
+    ablation.prepare(_eval_cfg(tmp_path), TrainConfig(), ["all_raw"], plan_root=tmp_path / "p")
+    plan_path = ablation.prepare(
+        _eval_cfg(tmp_path), TrainConfig(), ["all_aug"], plan_root=tmp_path / "p"
+    )
+    cells = {c["label"]: c for c in json.loads(plan_path.read_text())["cells"]}
+    assert [c for c in cells if cells[c]["prepared"]] == ["all_raw", "all_aug"]
+    assert cells["all_raw"]["frames"] == 50
+    assert "rehearsal-all_raw" in (plan_path.parent / "spark.sh").read_text()
+    changed = ablation.prepare(
+        _eval_cfg(tmp_path, steps=5), TrainConfig(), ["all_aug"], plan_root=tmp_path / "p"
+    )
+    cells = {c["label"]: c for c in json.loads(changed.read_text())["cells"]}
+    assert [c for c in cells if cells[c]["prepared"]] == ["all_aug"]
 
 
 def test_prepare_rejects_unknown_cells(tmp_path, fake_hub):
@@ -216,10 +249,23 @@ def test_spark_script_skips_existing_output_dirs(tmp_path, fake_hub):
     plan_path = ablation.prepare(
         _eval_cfg(tmp_path), TrainConfig(), ["all_raw"], plan_root=tmp_path / "p"
     )
-    script = (plan_path.parent / "spark.sh").read_text().replace("uv run e2l", "echo TRAIN")
     work = tmp_path / "spark"
-    (work / "outputs" / "train" / "rehearsal-all_raw").mkdir(parents=True)
-    out = subprocess.run(["bash", "-c", script], cwd=work, capture_output=True, text=True)
+    run_dir = work / "outputs" / "train" / "rehearsal-all_raw"
+    fake_train = f"mkdir -p {run_dir}; echo TRAIN"  # lerobot-train creates its output dir
+    script = (plan_path.parent / "spark.sh").read_text().replace("uv run e2l", fake_train)
+
+    def spark():
+        return subprocess.run(["bash", "-c", script], cwd=work, capture_output=True, text=True)
+
+    run_dir.mkdir(parents=True)  # a crashed run: output dir but no done marker
+    out = spark()
+    assert out.returncode != 0 and "TRAIN" not in out.stdout
+    assert "partial run" in out.stderr and "delete" in out.stderr
+    run_dir.rmdir()
+    out = spark()
+    assert out.returncode == 0, out.stderr
+    assert "TRAIN" in out.stdout and (run_dir / ".e2l-done").is_file()
+    out = spark()
     assert out.returncode == 0, out.stderr
     assert "TRAIN" not in out.stdout and "skip rehearsal-all_raw" in out.stdout
 
@@ -250,7 +296,13 @@ def test_evaluate_skips_done_and_pending_cells(tmp_path, monkeypatch):
         (done / s / "results.json").write_text("{}")
     (cfg.output_dir / "rehearsal-n05_raw" / "standard").mkdir(parents=True)
     (cfg.output_dir / "rehearsal-n05_raw" / "standard" / "results.json").write_text("{}")
-    monkeypatch.setattr(hub, "repo_exists", lambda repo, kind="model": repo != "me/aug-policy")
+    checked = []
+
+    def has_file(repo, filename, repo_type="model"):
+        checked.append((filename, repo_type))
+        return repo != "me/aug-policy"
+
+    monkeypatch.setattr(hub, "has_file", has_file)
     monkeypatch.setattr(hub, "download_policy", lambda repo: tmp_path / "snap" / repo)
     calls = []
     monkeypatch.setattr(
@@ -276,3 +328,4 @@ def test_evaluate_skips_done_and_pending_cells(tmp_path, monkeypatch):
             "rehearsal-n05_raw",
         )
     ]
+    assert set(checked) == {("config.json", "model")}

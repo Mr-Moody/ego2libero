@@ -55,9 +55,10 @@ grid.
    - `spark.sh` is run by the user in a clone of this repo on the Spark (`git pull`,
      `uv sync --group train --group dev`, `uv run hf download <ns>/e2l-<plan>-plan
      --repo-type dataset --local-dir outputs/ablation/<plan>` first): one `e2l train finetune`
-     per prepared cell, in order, each pushing its checkpoint. A cell whose
-     `outputs/train/<plan>-<cell>` already exists is skipped with a message (delete it to
-     retrain), so a rerun after a failure resumes. It stops at the first failure
+     per prepared cell, in order, each pushing its checkpoint and then writing
+     `outputs/train/<plan>-<cell>/.e2l-done`. A cell with that marker is skipped with a message;
+     an output dir without it is a crashed run, and the script stops asking for it to be deleted,
+     so a rerun after a failure resumes at the failed cell. It stops at the first failure
      (`set -euo pipefail`).
    - An augmented cell with no successful generated episodes for its demos is an error at
      prepare time (it would silently equal the raw cell).
@@ -99,7 +100,7 @@ grid.
 | `e2l_train/finetune.py` | Hub dataset (no root) and push flags in `build_command` / `launch` |
 | `e2l_train/export.py` | unchanged API; `prepare` calls `export_dataset` with an episode list |
 | `e2l_eval/ablation.py` | `Cell`, `eligible_demos`, `select_cells`, `prepare`, `spark_script`, `evaluate` |
-| `e2l_eval/hub.py` (new) | thin wrappers: `namespace`, `repo_exists`, `push_dataset`, `push_folder`, `download_policy` (lazy `huggingface_hub` / LeRobot imports) |
+| `e2l_eval/hub.py` (new) | thin wrappers: `namespace`, `has_file`, `push_dataset`, `push_folder`, `download_policy` (lazy `huggingface_hub` / LeRobot imports) |
 | `e2l_eval/cli.py` | `ablate prepare`, `ablate evaluate` (replaces `ablate`) |
 | `e2l_eval/report.py` | `plot_ablation`; called from `make_report` per plan |
 | `CLAUDE.md` | ablation commands |
