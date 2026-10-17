@@ -2,7 +2,8 @@
 # https://github.com/Mr-Moody/Hand-Tracking-Fusion
 # Changes: x-negation of world landmarks is now the `mirrored` flag (default False, phone
 # video is not mirrored); handedness label and score are returned; timestamps come from the
-# video clock (seconds) and are converted with round(t * 1000).
+# video clock (seconds) and are converted with round(t * 1000). The handedness label is swapped
+# only for mirrored frames (the source assumed MediaPipe labels a mirrored image).
 """MediaPipe HandLandmarker wrapper (VIDEO running mode)."""
 
 from dataclasses import dataclass
@@ -36,8 +37,9 @@ def to_detection(
 
     `lm2d` / `lm3d` are sequences of landmarks with .x/.y/.z (normalised image coords and world
     metres); `category` has .category_name and .score. A mirrored (selfie) frame flips the
-    chirality of the world landmarks, so x is negated to restore it. MediaPipe labels handedness
-    assuming a mirrored image, so on an unmirrored frame the label is swapped."""
+    chirality of the world landmarks, so x is negated to restore it. The Tasks API labels the
+    hand as it appears (a right hand in unmirrored phone video is "Right", despite the legacy
+    docs saying it assumes a mirrored image), so the label is swapped only on a mirrored frame."""
     landmarks_2d = np.array([[lm.x * width, lm.y * height] for lm in lm2d], dtype=np.float32)
     sign = -1.0 if mirrored else 1.0
     landmarks_3d = np.array([[sign * lm.x, lm.y, lm.z] for lm in lm3d], dtype=np.float32)
@@ -47,7 +49,7 @@ def to_detection(
     visible_mask = vis_scores > 0.5 if vis_scores.max() < 1.0 else np.ones(21, dtype=bool)
 
     label = category.category_name
-    if not mirrored:
+    if mirrored:
         label = {"Left": "Right", "Right": "Left"}[label]
     return HandDetection(
         landmarks_2d=landmarks_2d,

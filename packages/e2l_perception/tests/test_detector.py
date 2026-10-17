@@ -29,7 +29,8 @@ def test_mirroring_flips_palm_chirality(hand_pts, fake_mediapipe_hand):
 
 def test_handedness_label_and_score(hand_pts, fake_mediapipe_hand):
     lm2d, lm3d, cat = fake_mediapipe_hand(hand_pts, "Left", score=0.8)
-    # MediaPipe labels assume a mirrored image: unmirrored input swaps the label.
-    assert to_detection(lm2d, lm3d, cat, 1, 1, mirrored=False).handedness == "Right"
-    det = to_detection(lm2d, lm3d, cat, 1, 1, mirrored=True)
+    # The Tasks API labels the hand as seen: a right hand in unmirrored phone video is "Right"
+    # (checked on 50 rear-camera demos). A mirrored frame shows the other hand, so it swaps.
+    det = to_detection(lm2d, lm3d, cat, 1, 1, mirrored=False)
     assert det.handedness == "Left" and np.isclose(det.handedness_score, 0.8)
+    assert to_detection(lm2d, lm3d, cat, 1, 1, mirrored=True).handedness == "Right"
