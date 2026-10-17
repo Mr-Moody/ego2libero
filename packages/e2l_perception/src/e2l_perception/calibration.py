@@ -75,27 +75,64 @@ def find_corners(gray: np.ndarray, board_size: tuple[int, int] = BOARD_SIZE) -> 
     return cv2.cornerSubPix(gray, corners, (11, 11), (-1, -1), _SUBPIX_CRIT)
 
 
+def calibrate_from_corners(
+    img_pts: list[np.ndarray],
+    size: tuple[int, int],
+    board_size: tuple[int, int] = BOARD_SIZE,
+    square: float = SQUARE_M,
+    min_views: int = 10,
+    max_view_err: float = 1.0,
+) -> tuple[Intrinsics, np.ndarray]:
+    """Calibrate from checkerboard corners (N, 1, 2) per view; returns the intrinsics and a
+    (views,) mask of the views kept.
+
+    Views whose RMS reprojection error exceeds max(`max_view_err`, 2 x median) are dropped and
+    the fit repeated until none are (blur and rolling-shutter skew in fast-moving video frames
+    otherwise drag the whole fit, e.g. 1.88 px -> 0.82 px on a phone video). k3 is fixed at
+    zero: phone lenses are corrected in-camera, and a free k3 overfits views that don't reach
+    the image corners."""
+    obj = board_object_points(board_size, square)
+    kept = np.ones(len(img_pts), dtype=bool)
+    while True:
+        idx = np.flatnonzero(kept)
+        if len(idx) < min_views:
+            raise RuntimeError(f"only {len(idx)} usable checkerboard views (need {min_views})")
+        views = [img_pts[i] for i in idx]
+        rms, K, dist, rvecs, tvecs = cv2.calibrateCamera(
+            [obj] * len(views), views, size, None, None, flags=cv2.CALIB_FIX_K3
+        )
+        errs = np.array(
+            [
+                np.sqrt(np.mean(np.sum((cv2.projectPoints(obj, r, t, K, dist)[0] - v) ** 2, -1)))
+                for v, r, t in zip(views, rvecs, tvecs, strict=True)
+            ]
+        )
+        bad = errs > max(max_view_err, 2 * np.median(errs))
+        if not bad.any():
+            intr = Intrinsics(K=K, dist=dist.ravel(), size=(int(size[0]), int(size[1])), rms=rms)
+            return intr, kept
+        kept[idx[bad]] = False
+
+
 def calibrate_from_frames(
     frames: Iterable[np.ndarray],
     board_size: tuple[int, int] = BOARD_SIZE,
     square: float = SQUARE_M,
     min_views: int = 10,
-) -> Intrinsics:
-    """Calibrate one camera from BGR frames that show the checkerboard."""
-    obj = board_object_points(board_size, square)
-    obj_pts, img_pts, size = [], [], None
+) -> tuple[Intrinsics, np.ndarray]:
+    """Calibrate one camera from BGR frames that show the checkerboard (see
+    `calibrate_from_corners`; the mask covers the frames where the board was found)."""
+    img_pts, size = [], None
     for frame in frames:
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY) if frame.ndim == 3 else frame
         corners = find_corners(gray, board_size)
         if corners is None:
             continue
-        obj_pts.append(obj)
         img_pts.append(corners)
         size = gray.shape[::-1]
-    if len(obj_pts) < min_views:
-        raise RuntimeError(f"only {len(obj_pts)} checkerboard views found (need {min_views})")
-    rms, K, dist, _, _ = cv2.calibrateCamera(obj_pts, img_pts, size, None, None)
-    return Intrinsics(K=K, dist=dist.ravel(), size=(int(size[0]), int(size[1])), rms=float(rms))
+    if len(img_pts) < min_views:
+        raise RuntimeError(f"only {len(img_pts)} checkerboard views found (need {min_views})")
+    return calibrate_from_corners(img_pts, size, board_size, square, min_views)
 
 
 # ---------------------------------------------------------------------------

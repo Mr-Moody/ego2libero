@@ -14,7 +14,7 @@ import numpy as np
 import typer
 
 from e2l_common.paths import DataPaths
-from e2l_perception.calibration import BOARD_SIZE, SQUARE_M, calibrate_from_frames, find_corners
+from e2l_perception.calibration import BOARD_SIZE, SQUARE_M, calibrate_from_corners, find_corners
 from e2l_perception.video import VideoReader, normalise
 
 
@@ -22,7 +22,7 @@ def main(
     video: Path,
     device: str = typer.Option("phone", help="Name of data/calib/<device>.json."),
     fps: float = typer.Option(30.0, help="Normalisation frame rate (match the demos)."),
-    max_views: int = typer.Option(40, help="Checkerboard views used in the calibration."),
+    max_views: int = typer.Option(60, help="Checkerboard views used in the calibration."),
     cols: int = typer.Option(BOARD_SIZE[0], help="Inner corners per row."),
     rows: int = typer.Option(BOARD_SIZE[1], help="Inner corners per column."),
     square: float = typer.Option(SQUARE_M, help="Square side, metres."),
@@ -34,17 +34,20 @@ def main(
 
     # Scan a subsample for frames where the board is found, then keep an even spread.
     step = max(1, len(reader) // (max_views * 4))
-    found = []
+    found, size = [], reader.size
     for frame, _ in itertools.islice(reader, 0, None, step):
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        if find_corners(gray, (cols, rows)) is not None:
-            found.append(gray)
+        corners = find_corners(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY), (cols, rows))
+        if corners is not None:
+            found.append(corners)
     typer.echo(f"checkerboard found in {len(found)} of {len(reader) // step} scanned frames")
     keep = [
         found[i] for i in np.linspace(0, len(found) - 1, min(max_views, len(found))).astype(int)
     ]
 
-    intr = calibrate_from_frames(keep, (cols, rows), square, min_views=min(10, max_views))
+    intr, kept = calibrate_from_corners(
+        keep, size, (cols, rows), square, min_views=min(10, max_views)
+    )
+    typer.echo(f"kept {kept.sum()} of {len(keep)} views (dropped high reprojection error)")
     out = intr.save(paths.calib(device))
     typer.echo(f"RMS reprojection error {intr.rms:.3f} px, size {intr.size}; wrote {out}")
     typer.echo(np.array2string(intr.K, precision=1))
