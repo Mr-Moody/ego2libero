@@ -48,8 +48,9 @@ def hand_to_ee(
 
 
 def retarget_segments(segments: HandSegments, cfg: RetargetConfig) -> RobotSegments:
-    """Map every HandSegment to a RobotSegment: poses via `hand_to_ee`, grip {0,1} to robosuite
-    gripper {-1,+1}, and `feasible` from `feasibility.check_segment` at the demo fps."""
+    """Map every HandSegment to a RobotSegment: poses via `hand_to_ee` (positions scaled by
+    `cfg.object_scale` of the segment's reference object), grip {0,1} to robosuite gripper
+    {-1,+1}, and `feasible` from `feasibility.check_segment` at the demo fps."""
     robot = []
     prev: tuple[np.ndarray, np.ndarray] | None = None  # last gripper x and hand R, old object frame
     for seg in segments.segments:
@@ -62,6 +63,8 @@ def retarget_segments(segments: HandSegments, cfg: RetargetConfig) -> RobotSegme
                 x_init = h / np.linalg.norm(h)
         T_obj_ee = hand_to_ee(seg.T_obj_hand, cfg, x_init)
         prev = (T_obj_ee[-1, :3, 0], seg.T_obj_hand[-1, :3, :3])
+        if seg.ref_object in cfg.object_scale:
+            T_obj_ee[:, :3, 3] *= np.asarray(cfg.object_scale[seg.ref_object])
         t = np.arange(len(T_obj_ee)) / segments.fps
         robot.append(
             RobotSegment(
