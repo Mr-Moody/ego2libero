@@ -12,7 +12,7 @@ from e2l_common.schemas import DemoTrajectory
 from e2l_perception.calibration import load_intrinsics
 from e2l_perception.hand.detector import HandDetection
 from e2l_perception.hand.palm import compute_palm_frame
-from e2l_perception.hand.pose import estimate_T_cam_hand, palm_pose
+from e2l_perception.hand.pose import estimate_T_cam_hand, palm_pose, scale_hand
 from e2l_perception.smoothing import smooth_tracks
 from e2l_perception.video import VideoReader
 
@@ -63,7 +63,7 @@ def observe_frames(
             detection = hand_filter.select(detector.detect_all(frame, t))
             obs = FrameObservation(markers.T_cam_table, markers.T_cam_obj, detection=detection)
             if detection is not None:
-                world = detection.landmarks_3d.astype(np.float64)
+                world = scale_hand(detection.landmarks_3d, cfg.hand_scale)
                 T_world_hand = palm_pose(world)
                 obs.T_cam_hand = estimate_T_cam_hand(
                     world, detection.landmarks_2d, intr.K, intr.dist, T_world_hand

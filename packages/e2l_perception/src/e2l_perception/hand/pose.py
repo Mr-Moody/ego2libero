@@ -15,6 +15,13 @@ def palm_pose(world_landmarks: np.ndarray) -> np.ndarray:
     return make_T(compute_palm_frame(pts), pts[0])
 
 
+def scale_hand(world_landmarks: np.ndarray, hand_scale: float) -> np.ndarray:
+    """World landmarks (21,3) resized to the demonstrator's hand. MediaPipe's metric world
+    landmarks assume a typical hand; PnP depth scales with that size, so a hand `hand_scale`
+    times the model's is placed 1/hand_scale too far from the camera unless resized."""
+    return np.asarray(world_landmarks, dtype=np.float64) * hand_scale
+
+
 def estimate_T_cam_world(
     world_landmarks: np.ndarray, image_landmarks_px: np.ndarray, K: np.ndarray, dist: np.ndarray
 ) -> np.ndarray | None:

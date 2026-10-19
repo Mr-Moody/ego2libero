@@ -4,6 +4,8 @@ hand_model: models/hand_landmarker.task  # downloaded by `make models`
 fps: 30.0                                # constant frame rate after normalisation
 mirrored: false                          # true only for selfie / webcam feeds
 hand: Right                              # MediaPipe handedness label of the demonstrating hand
+hand_scale: 0.85                         # demonstrator's hand / MediaPipe model hand; PnP depth
+                                         # scales with it (fit on 20261019: carried bowl offset)
 num_hands: 2                             # detect both so the filter can reject the wrong one
 min_detection_confidence: 0.5
 min_tracking_confidence: 0.5

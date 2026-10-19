@@ -78,6 +78,7 @@ class PerceptionConfig(_Config):
     fps: float = 30.0  # normalised constant frame rate
     mirrored: bool = False  # true only for selfie/webcam feeds
     hand: Literal["Left", "Right"] = "Right"
+    hand_scale: float = 1.0  # demonstrator's hand size / MediaPipe's model hand (sets PnP depth)
     num_hands: int = 2
     min_detection_confidence: float = 0.5
     min_tracking_confidence: float = 0.5
