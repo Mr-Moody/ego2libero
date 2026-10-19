@@ -47,12 +47,19 @@ def transit(T_from: np.ndarray, T_to: np.ndarray, cfg: SimConfig) -> np.ndarray:
 
 
 def hold_at_grip_changes(T: np.ndarray, grip: np.ndarray, steps: int):
-    """Repeat the target `steps` extra times wherever the gripper command flips, so the
-    fingers finish closing (or opening) before the arm moves on."""
+    """Wherever the gripper command flips, hold the event's target `steps` times with the old
+    command so the arm arrives first, then `steps` more with the new one so the fingers finish
+    closing (or opening) before the arm moves on."""
     flips = np.flatnonzero(np.diff(np.sign(grip)) != 0) + 1
     reps = np.ones(len(T), dtype=int)
     reps[flips] += steps
-    return np.repeat(T, reps, axis=0), np.repeat(grip, reps)
+    T_out, g_out = np.repeat(T, reps, axis=0), np.repeat(grip, reps)
+    starts = np.cumsum(reps) - reps  # index of each input frame in the output
+    arrive = np.repeat(starts[flips], steps)
+    return (
+        np.insert(T_out, arrive, T_out[arrive], axis=0),
+        np.insert(g_out, arrive, g_out[arrive - 1]),
+    )
 
 
 def carry_targets(

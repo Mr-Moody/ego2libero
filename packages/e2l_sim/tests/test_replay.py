@@ -67,11 +67,11 @@ def test_carry_targets_move_the_held_object_along_its_demo_path():
     np.testing.assert_allclose(carry_targets(T_ref_ee, demo_grasp, demo_grasp), T_ref_ee)
 
 
-def test_hold_at_grip_changes():
-    T = make_T(np.eye(3), np.zeros((4, 3)))
+def test_hold_at_grip_changes_arrives_open_then_closes():
+    T = make_T(np.eye(3), np.arange(12.0).reshape(4, 3))
     T_out, g_out = hold_at_grip_changes(T, np.array([-1.0, -1.0, 1.0, 1.0]), steps=3)
-    assert len(T_out) == 7
-    np.testing.assert_array_equal(g_out, [-1, -1, 1, 1, 1, 1, 1])
+    np.testing.assert_array_equal(g_out, [-1, -1, -1, -1, -1, 1, 1, 1, 1, 1])
+    np.testing.assert_array_equal(T_out[2:9], np.repeat(T[2:3], 7, axis=0))  # held at the event
 
 
 def test_table_to_sim_broadcasts():
