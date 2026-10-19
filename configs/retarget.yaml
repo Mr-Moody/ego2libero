@@ -1,11 +1,18 @@
 # HandSegments -> RobotSegments.
 
 # Wrist (palm frame origin; x towards the middle knuckle) to the grip point, in the hand frame.
-# The default is a placeholder: run `e2l retarget calibrate <demo_id>` on a recorded demo and
-# paste its two lines before the first replay.
-T_hand_ee: {xyz: [0.08, 0.0, 0.0], rotvec: [0.0, 0.0, 0.0]}
+# Measured with `e2l retarget calibrate` on 20261019_bowlplate_000..020 (median offset, mean
+# sign-aligned closing axis).
+T_hand_ee: {xyz: [0.097, -0.016, 0.042], rotvec: [0.0, 0.0, 0.0]}
 canonicalise_top_down: true              # grip straight down; fingers close along closing_axis
-closing_axis: [0.0, 1.0, 0.0]            # hand frame; `e2l retarget calibrate` measures it too
+closing_axis: [0.194, 0.116, -0.974]     # hand frame; `e2l retarget calibrate` measures it too
+# sim / real per object (x, y, z). Physical sizes: akita bowl 11.2 x 5.2 cm vs real 19.2 x 5.0;
+# LIBERO plate 13.7 cm vs real 27.1 across. Fitted instead to the 20261019 grasps: the pinch
+# rides a 7.2 cm radius 6.8 cm above the bowl base, the sim rim grasp is at ~4.7 cm, ~4 cm up.
+# The plate frame is where the bowl is set down, so it takes the bowl's grasp scale.
+object_scale:
+  bowl: [0.65, 0.65, 0.6]
+  plate: [0.65, 0.65, 0.6]
 # Feasibility is advisory: `e2l retarget run` reports the fraction of feasible frames; replay
 # does not use it.
 min_height: -0.02                        # m, object frame: grip point not below the table

@@ -21,8 +21,11 @@ objects:
   bowl:
     marker_id: 20
     marker_length: 0.03
-    T_marker_obj: {xyz: [0.0, 0.0, 0.0], rotvec: [0.0, 0.0, 0.0]}
+    # tag on the bowl's inside floor, off-centre: rim-circle fit of the 20261019 grasps
+    T_marker_obj: {xyz: [-0.015, 0.001, 0.0], rotvec: [0.0, 0.0, 0.0]}
   plate:
     marker_id: 21
     marker_length: 0.03
+    # tag near the plate's front edge, but the demos centre the bowl on the tag, so the tag is
+    # where the sim plate's centre should be
     T_marker_obj: {xyz: [0.0, 0.0, 0.0], rotvec: [0.0, 0.0, 0.0]}
