@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from e2l_common.config import CaptureConfig, PerceptionConfig
-from e2l_common.geometry import compose, make_T, rotvec_to_matrix
+from e2l_common.geometry import compose, inv_T, make_T, rotvec_to_matrix
 from e2l_perception.calibration import Intrinsics
 from e2l_perception.hand.palm import compute_palm_frame
 from e2l_perception.pipeline import (
@@ -101,3 +101,10 @@ def test_observe_frames_rejects_mismatched_intrinsics(tmp_path):
 def test_observe_frames_rejects_mirrored(tmp_path):
     with pytest.raises(ValueError, match="mirrored"):
         next(observe_frames(tmp_path / "x.mp4", PerceptionConfig(mirrored=True), CaptureConfig()))
+
+
+def test_assemble_records_the_camera_centre_in_the_table_frame(hand_pts):
+    obs = [_obs(i, hand_pts, board=i != 2) for i in range(5)]
+    demo = assemble_trajectory("20261008_test_000", FPS, obs, ["bowl"], _cfg())
+    np.testing.assert_allclose(demo.cam_table[0], inv_T(T_CAM_TABLE)[:3, 3], atol=1e-9)
+    assert np.isnan(demo.cam_table[2]).all()

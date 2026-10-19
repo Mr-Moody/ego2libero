@@ -126,11 +126,14 @@ class DemoTrajectory(ArrayModel):
     aperture: np.ndarray  # (N,) thumb-tip to index-tip distance, metres
     T_table_obj: np.ndarray  # (N,K,4,4)
     obj_valid: np.ndarray  # (N,K) bool
+    cam_table: np.ndarray | None = None  # (N,3) camera centre in the table frame, NaN if unseen
 
     @model_validator(mode="after")
     def _shapes(self) -> Self:
+        cam = {} if self.cam_table is None else {"cam_table": (self.cam_table, ("N", 3))}
         _check_shapes(
             {
+                **cam,
                 "t": (self.t, ("N",)),
                 "T_table_hand": (self.T_table_hand, ("N", 4, 4)),
                 "hand_valid": (self.hand_valid, ("N",)),

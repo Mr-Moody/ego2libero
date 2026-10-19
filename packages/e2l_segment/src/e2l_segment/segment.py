@@ -5,12 +5,16 @@ import numpy as np
 from e2l_common.config import SegmentConfig
 from e2l_common.geometry import interpolate_poses, inv_T
 from e2l_common.schemas import DemoTrajectory, HandSegment, HandSegments
+from e2l_segment.anchor import anchor_depth
 from e2l_segment.assign import Side, nearest_valid_index, reference_object
 from e2l_segment.events import aperture_to_grip, grip_events
 
 
 def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
     """DemoTrajectory -> HandSegments.
+
+    Hand depth is first anchored to the carried objects (`anchor.anchor_depth`, using the grip
+    from the raw aperture).
 
     Segments run from the previous event (or start) to each grasp/release event (or end). Each
     segment stores T_obj_hand = inv(T_table_obj[ref]) @ T_table_hand over its frames, where the
@@ -27,6 +31,7 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
     if not demo.hand_valid.any():
         raise ValueError(f"{demo.demo_id}: hand is never valid")
     grip = aperture_to_grip(demo.t, demo.aperture, cfg)
+    demo = anchor_depth(demo, grip, cfg)
     found = grip_events(demo.t, grip)
     events = [e.index for e in found]
     last = len(demo.t) - 1

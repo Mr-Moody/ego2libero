@@ -45,11 +45,14 @@ def calibrate(
     from e2l_common.config import SegmentConfig
     from e2l_common.schemas import DemoTrajectory
     from e2l_retarget.calibrate import estimate_grip
+    from e2l_segment.anchor import anchor_depth
     from e2l_segment.events import aperture_to_grip
 
     demo = DemoTrajectory.load(DataPaths.default().perception(demo_id))
     seg_cfg = load_stage_config(segment_config, set_, SegmentConfig)
-    closed = aperture_to_grip(demo.t, demo.aperture, seg_cfg) == 1
+    grip = aperture_to_grip(demo.t, demo.aperture, seg_cfg)
+    demo = anchor_depth(demo, grip, seg_cfg)
+    closed = grip == 1
     xyz, axis, n = estimate_grip(demo, closed)
     typer.echo(f"# {demo_id}: {n} closed-grip frames")
     typer.echo(

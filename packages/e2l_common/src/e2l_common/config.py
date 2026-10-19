@@ -93,6 +93,9 @@ class SegmentConfig(_Config):
     close_threshold: float = 0.035  # aperture (m) below which the grip closes
     open_threshold: float = 0.055  # aperture (m) above which it opens again
     min_dwell_s: float = 0.25
+    anchor_depth: bool = True  # rescale hand depth so the pinch rides the carried object
+    depth_window_s: float = 1.0  # running-median window that flags hand depth spikes (s)
+    depth_outlier_m: float = 0.05  # free-motion depth this far from that median is a spike
 
 
 class RetargetConfig(_Config):
