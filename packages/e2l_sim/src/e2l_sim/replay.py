@@ -3,9 +3,9 @@
 import numpy as np
 
 from e2l_common.config import SimConfig
-from e2l_common.geometry import interpolate_poses
+from e2l_common.geometry import interpolate_poses, inv_T
 from e2l_common.schemas import RobotSegment, RobotSegments, SimEpisode
-from e2l_sim.control import GRIPPER_OPEN, ee_pose, pose_error, track
+from e2l_sim.control import GRIPPER_CLOSED, GRIPPER_OPEN, ee_pose, pose_error, track
 from e2l_sim.env import make_env
 from e2l_sim.scene import object_poses, set_object_poses
 
@@ -55,6 +55,15 @@ def hold_at_grip_changes(T: np.ndarray, grip: np.ndarray, steps: int):
     return np.repeat(T, reps, axis=0), np.repeat(grip, reps)
 
 
+def carry_targets(
+    T_ref_ee: np.ndarray, T_held_ee_demo: np.ndarray, T_held_ee_actual: np.ndarray
+) -> np.ndarray:
+    """Re-attach a carry segment (M,4,4) to the grasp the robot actually made: the held object
+    follows its demo path relative to the reference object (T_ref_ee @ inv(T_held_ee_demo)),
+    and the end effector holds it as it does now (T_held_ee_actual)."""
+    return T_ref_ee @ inv_T(T_held_ee_demo) @ T_held_ee_actual
+
+
 def sim_object(name: str, cfg: SimConfig) -> str:
     return cfg.object_map.get(name, name)
 
@@ -73,7 +82,9 @@ def replay(
     Nominal poses come from the LIBERO init state `episode_index`; `T_sim_obj` (LIBERO object
     name -> (4,4)) overrides some or all of them. Each segment is anchored to its reference
     object's pose at the moment the segment starts, as in MimicGen, and is reached from the
-    current grip-site pose by a straight `transit`."""
+    current grip-site pose by a straight `transit`. A segment that starts with the gripper
+    closed carries the previous segment's object: it is re-attached to the grasp measured in the
+    sim at its start (`carry_targets`), so the object, not the gripper, follows the demo."""
     env = make_env(cfg, episode_index=episode_index)
     try:
         obs, _ = env.reset(seed=cfg.seed)
@@ -85,13 +96,23 @@ def replay(
 
         observations, actions, success = [], [], False
         gripper = GRIPPER_OPEN
+        prev: RobotSegment | None = None
         for seg in segments.segments:
             budget = cfg.max_steps - len(actions)
             if budget <= 0 or (success and stop_on_success):
                 break
             name = sim_object(seg.ref_object, cfg)
             T_obj_ee, grip = resample_segment(seg, segments.fps, cfg.control_freq)
-            T_sim_ee = object_poses(env)[name] @ T_obj_ee
+            poses = object_poses(env)
+            if (
+                prev is not None
+                and seg.gripper[0] == GRIPPER_CLOSED
+                and prev.ref_object != seg.ref_object
+            ):
+                held = poses[sim_object(prev.ref_object, cfg)]
+                T_obj_ee = carry_targets(T_obj_ee, prev.T_obj_ee[-1], inv_T(held) @ ee_pose(obs))
+            prev = seg
+            T_sim_ee = poses[name] @ T_obj_ee
             T_lead = transit(ee_pose(obs), T_sim_ee[0], cfg)
             targets = np.concatenate([T_lead, T_sim_ee])
             grips = np.concatenate([np.full(len(T_lead), gripper), grip])

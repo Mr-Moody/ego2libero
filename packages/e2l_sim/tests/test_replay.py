@@ -5,13 +5,19 @@ import numpy as np
 import pytest
 
 from e2l_common.config import SimConfig, load_config
-from e2l_common.geometry import make_T, rotvec_to_matrix
+from e2l_common.geometry import inv_T, make_T, rotvec_to_matrix
 from e2l_common.paths import repo_root
 from e2l_common.schemas import RobotSegment, RobotSegments
 from e2l_sim.control import pose_error
 from e2l_sim.libero_setup import libero_available
 from e2l_sim.render import save_video, upright
-from e2l_sim.replay import hold_at_grip_changes, libero_state, resample_segment, transit
+from e2l_sim.replay import (
+    carry_targets,
+    hold_at_grip_changes,
+    libero_state,
+    resample_segment,
+    transit,
+)
 from e2l_sim.scene import table_to_sim
 
 
@@ -49,6 +55,16 @@ def test_transit_speed_and_endpoints():
     np.testing.assert_allclose(path[-1], T1, atol=1e-12)
     assert pose_error(T0, path[0])[0] == pytest.approx(0.1 / 8)
     assert len(transit(T0, T0, cfg)) == 1
+
+
+def test_carry_targets_move_the_held_object_along_its_demo_path():
+    T_ref_ee = np.stack([make_T(t=np.array([0.1 * i, 0.0, 0.2])) for i in range(3)])
+    demo_grasp = make_T(rotvec_to_matrix(np.array([np.pi, 0.0, 0.0])), np.array([0.07, 0, 0.05]))
+    actual = make_T(rotvec_to_matrix(np.array([np.pi, 0.0, 0.3])), np.array([0.04, 0.01, 0.03]))
+    T = carry_targets(T_ref_ee, demo_grasp, actual)
+    # the object the robot holds ends up where the demo's object was, relative to the reference
+    np.testing.assert_allclose(T @ inv_T(actual), T_ref_ee @ inv_T(demo_grasp), atol=1e-12)
+    np.testing.assert_allclose(carry_targets(T_ref_ee, demo_grasp, demo_grasp), T_ref_ee)
 
 
 def test_hold_at_grip_changes():
