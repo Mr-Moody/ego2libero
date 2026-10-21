@@ -72,6 +72,22 @@ def hold_at_grip_changes(T: np.ndarray, grip: np.ndarray, steps: int):
     )
 
 
+def trim_approach(
+    T_obj_ee: np.ndarray, grip: np.ndarray, radius: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Drop a grasp segment's targets before its approach last enters `radius` of the grasp
+    (its first closed target): far from the object the hand track is noisiest, and the transit
+    into the segment covers that stretch in a straight line. Segments without a grasp, or
+    starting closed, are returned unchanged."""
+    closed = np.flatnonzero(np.asarray(grip) == GRIPPER_CLOSED)
+    if len(closed) == 0 or closed[0] == 0:
+        return T_obj_ee, grip
+    g = closed[0]
+    far = np.linalg.norm(T_obj_ee[:g, :3, 3] - T_obj_ee[g, :3, 3], axis=1) > radius
+    start = int(np.flatnonzero(far)[-1]) + 1 if far.any() else 0
+    return T_obj_ee[start:], grip[start:]
+
+
 def snap_grasp(
     T_obj_ee: np.ndarray,
     grip: np.ndarray,
@@ -170,6 +186,8 @@ def replay(
             T_obj_ee, grip, T_obj_held = resample_segment(seg, segments.fps, cfg.control_freq)
             poses = object_poses(env)
             if name in cfg.rim_grasp:
+                if cfg.approach_radius is not None:
+                    T_obj_ee, grip = trim_approach(T_obj_ee, grip, cfg.approach_radius)
                 T_obj_ee = snap_grasp(
                     T_obj_ee,
                     grip,

@@ -18,6 +18,7 @@ from e2l_sim.replay import (
     resample_segment,
     snap_grasp,
     transit,
+    trim_approach,
 )
 from e2l_sim.scene import table_to_sim
 
@@ -118,6 +119,17 @@ def test_snap_grasp_descends_straight_onto_the_rim_from_above():
     np.testing.assert_allclose(xy, np.tile([0.0, 0.05], (6, 1)), atol=1e-12)  # straight down
     assert np.all(np.diff(out[20:26, 2, 3]) < 0)
     np.testing.assert_allclose(out[25:, :3, 3], np.tile([0.0, 0.05, 0.045], (5, 1)), atol=1e-12)
+
+
+def test_trim_approach_starts_where_the_path_last_enters_the_radius():
+    x = np.r_[0.5, 0.05, 0.3, 0.2, 0.1, 0.05, 0.0]  # wanders out and back before the grasp
+    T = make_T(np.eye(3), np.c_[x, np.zeros((7, 2))])
+    grip = np.r_[-np.ones(6), 1.0]
+    T_out, g_out = trim_approach(T, grip, radius=0.15)
+    np.testing.assert_allclose(T_out[:, 0, 3], [0.1, 0.05, 0.0])
+    np.testing.assert_allclose(g_out, [-1, -1, 1])
+    T_out, g_out = trim_approach(T, -np.ones(7), radius=0.15)  # no grasp: unchanged
+    assert len(T_out) == 7
 
 
 def test_hold_at_grip_changes_arrives_open_then_closes():
