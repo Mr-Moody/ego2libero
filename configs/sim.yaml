@@ -55,4 +55,4 @@ carry_warp: true
 place_xy: {plate_1: [0.0, 0.0]}
 # The hand body hits the wooden cabinet when it sets the bowl down from that side of the plate;
 # the bowl is round, so turn it on the way to set it down from elsewhere.
-release_keepout: [-95.0, 45.0]           # deg, sim frame: centre, half width
+release_keepout: [-95.0, 65.0]           # deg, sim frame: centre, half width
