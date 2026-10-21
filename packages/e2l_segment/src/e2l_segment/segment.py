@@ -6,7 +6,7 @@ from e2l_common.config import SegmentConfig
 from e2l_common.geometry import interpolate_poses, inv_T
 from e2l_common.schemas import DemoTrajectory, HandSegment, HandSegments
 from e2l_segment.anchor import anchor_depth
-from e2l_segment.assign import Side, nearest_valid_index, reference_object
+from e2l_segment.assign import Side, grasped_object, nearest_valid_index, reference_object
 from e2l_segment.events import aperture_to_grip, grip_events
 
 
@@ -19,7 +19,8 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
     Segments run from the previous event (or start) to each grasp/release event (or end). Each
     segment stores T_obj_hand = inv(T_table_obj[ref]) @ T_table_hand over its frames, where the
     object pose is held at its value at the segment's closing event (objects are static until
-    grasped), plus the binary grip from `events.aperture_to_grip`.
+    grasped), plus the binary grip from `events.aperture_to_grip`. A grasp references the object
+    that moves while held (`assign.grasped_object`); a release, the nearest other object.
 
     Segments share their boundary event frame. Each runs from its first to its last hand-valid
     frame (segments with fewer than 2 valid frames are dropped); invalid frames in between are
@@ -44,9 +45,10 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
     # before it, unless that is the only object ever seen (then its post-release pose is used).
     refs: list[tuple[str, Side]] = []
     held: frozenset[str] = frozenset()
-    for e in found:
+    for j, e in enumerate(found):
         if e.kind == "grasp":
-            refs.append((reference_object(demo, e.index, side="before"), "before"))
+            release = found[j + 1].index if j + 1 < len(found) else last
+            refs.append((grasped_object(demo, e.index, release), "before"))
             held = frozenset({refs[-1][0]})
         else:
             ref = reference_object(demo, e.index, held)

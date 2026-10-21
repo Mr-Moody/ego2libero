@@ -10,7 +10,7 @@ import numpy as np
 
 from e2l_common.config import SegmentConfig
 from e2l_common.schemas import DemoTrajectory
-from e2l_segment.assign import reference_object
+from e2l_segment.assign import grasped_object
 
 THUMB_TIP, INDEX_TIP = 4, 8
 
@@ -28,16 +28,17 @@ def _pinch(demo: DemoTrajectory) -> np.ndarray:
 def depth_ratios(demo: DemoTrajectory, grip: np.ndarray, cam: np.ndarray) -> np.ndarray:
     """(N,) corrected / raw pinch depth on carry frames, NaN elsewhere.
 
-    For each closed-grip run the carried object is the one nearest the pinch at the grasp. The
-    pinch-to-object offset (object frame) is the median over the run's frames where hand and
-    object are both seen; each such frame's depth is then the one that brings the pinch closest
-    to object pose @ offset along its ray from the camera centre `cam` (N,3)."""
+    For each closed-grip run the carried object is the one that moves while held
+    (`assign.grasped_object`). The pinch-to-object offset (object frame) is the median over the
+    run's frames where hand and object are both seen; each such frame's depth is then the one
+    that brings the pinch closest to object pose @ offset along its ray from the camera centre
+    `cam` (N,3)."""
     pinch = _pinch(demo)
     ray = pinch - cam
     depth = np.linalg.norm(ray, axis=1)
     ratio = np.full(len(demo.t), np.nan)
     for a, b in carry_runs(grip):
-        k = demo.object_names.index(reference_object(demo, a, side="before"))
+        k = demo.object_names.index(grasped_object(demo, a, b + 1))
         idx = np.arange(a, b + 1)
         idx = idx[demo.hand_valid[idx] & demo.obj_valid[idx, k]]
         if len(idx) < 3:
