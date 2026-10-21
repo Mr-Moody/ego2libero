@@ -20,6 +20,7 @@ from e2l_sim.replay import (
     snap_grasp,
     transit,
     trim_approach,
+    warp_start,
 )
 from e2l_sim.scene import table_to_sim
 
@@ -138,6 +139,18 @@ def test_carry_lift_is_full_until_the_set_down_then_ramps_to_zero():
     z = carry_lift(10, lift=0.04, ramp_steps=4)
     np.testing.assert_allclose(z, [0.04] * 6 + [0.03, 0.02, 0.01, 0.0])
     np.testing.assert_allclose(carry_lift(3, lift=0.04, ramp_steps=4), [0.02, 0.01, 0.0])
+
+
+def test_warp_start_moves_the_start_and_keeps_the_set_down():
+    path = make_T(np.eye(3), np.linspace([0.2, 0.2, 0.01], [0.0, 0.0, 0.01], 11))
+    path = np.concatenate([path, path[-1:].repeat(3, axis=0)])  # held still after the set-down
+    start = make_T(rotvec_to_matrix(np.array([0, 0, 0.4])), [-0.16, 0.0, 0.01])
+    out = warp_start(path, start, n=11)
+    np.testing.assert_allclose(out[0], start, atol=1e-12)
+    np.testing.assert_allclose(out[10:], path[10:], atol=1e-12)
+    step = np.linalg.norm(np.diff(out[:11, :3, 3], axis=0), axis=1)
+    assert step.max() < 0.06  # no jump: the shift fades along the way
+    np.testing.assert_allclose(warp_start(path, start, n=1), path)
 
 
 def test_hold_at_grip_changes_arrives_open_then_closes():

@@ -47,3 +47,6 @@ approach_radius: 0.15                    # m; earlier approach is replaced by th
 # sim plate has a rim. Lift straight up first, carry this much higher, ramp it out at set-down.
 carry_lift: 0.04                         # m
 carry_ramp_s: 0.5                        # s
+# The demo path starts where the real bowl was relative to the plate; bend it to start where
+# the sim bowl is, fading back onto the demo path by the set-down.
+carry_warp: true

@@ -140,6 +140,7 @@ class SimConfig(_Config):
     approach_radius: float | None = None  # m; keep only the approach within this of the grasp
     carry_lift: float = 0.0  # m; extra height while carrying, ramped out at the set-down
     carry_ramp_s: float = 0.5
+    carry_warp: bool = False  # start the carried object's path where it is (`warp_start`)
 
 
 class GenerateConfig(_Config):

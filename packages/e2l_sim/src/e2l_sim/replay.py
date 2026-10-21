@@ -147,6 +147,26 @@ def carry_lift(n: int, lift: float, ramp_steps: int) -> np.ndarray:
     return lift * np.clip((n - 1 - np.arange(n)) / max(1, ramp_steps), 0.0, 1.0)
 
 
+def warp_start(T_ref_held: np.ndarray, T_ref_start: np.ndarray, n: int) -> np.ndarray:
+    """Shift a held object's demo path (M,4,4) so it starts at T_ref_start, the object's actual
+    pose, instead of where the demo's object started relative to the reference. The shift fades
+    with a smoothstep in the distance travelled and is gone at index n - 1 (the set-down), so the
+    path keeps the human's shape but needs no detour to its demo start and ends where it did."""
+    out = T_ref_held.copy()
+    n = min(n, len(out))
+    if n < 2:
+        return out
+    dp = T_ref_start[:3, 3] - T_ref_held[0, :3, 3]
+    dr = matrix_to_rotvec(T_ref_start[:3, :3] @ T_ref_held[0, :3, :3].T)
+    s = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(T_ref_held[:n, :3, 3], axis=0), axis=1))]
+    u = s / s[-1] if s[-1] > 1e-9 else np.arange(n) / (n - 1)
+    w = 1.0 - u * u * (3.0 - 2.0 * u)
+    for i in range(n):
+        out[i, :3, :3] = rotvec_to_matrix(w[i] * dr) @ T_ref_held[i, :3, :3]
+        out[i, :3, 3] = T_ref_held[i, :3, 3] + w[i] * dp
+    return out
+
+
 def carry_targets(T_ref_held: np.ndarray, T_held_ee: np.ndarray) -> np.ndarray:
     """End-effector targets (M,4,4) that move the held object along its demo path relative to the
     reference object, T_ref_held (M,4,4), while holding it as the robot actually does now,
@@ -216,9 +236,11 @@ def replay(
                 held = poses[sim_object(prev.ref_object, cfg)]
                 if T_obj_held is None:  # no object track: the hand path and the demo grasp
                     T_obj_held = T_obj_ee @ inv_T(prev.T_obj_ee[-1])
-                T_obj_ee = carry_targets(T_obj_held, inv_T(held) @ ee_pose(obs))
                 opened = np.flatnonzero(grip == GRIPPER_OPEN)
                 n = int(opened[0]) + 1 if len(opened) else len(grip)
+                if cfg.carry_warp:
+                    T_obj_held = warp_start(T_obj_held, inv_T(poses[name]) @ held, n)
+                T_obj_ee = carry_targets(T_obj_held, inv_T(held) @ ee_pose(obs))
                 ramp = round(cfg.carry_ramp_s * cfg.control_freq)
                 T_obj_ee[:n, 2, 3] += carry_lift(n, cfg.carry_lift, ramp)
                 T_up = ee_pose(obs)  # lift straight off the table before moving across it
