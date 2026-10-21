@@ -126,6 +126,10 @@ class SimConfig(_Config):
     gripper_settle_steps: int = 10  # control steps held at each grasp / release
     max_steps_per_target: int = 3  # extra tracking steps while the grip site lags its target
     tracking_gain: float = 3.0  # pose error -> action gain (OSC lags a single delta)
+    # LIBERO object name -> (radius, height) of its rim grasp, object frame: grasps on it are
+    # snapped there, blending the human approach in over `grasp_blend_s` (see replay.snap_grasp).
+    rim_grasp: dict[str, tuple[float, float]] = Field(default_factory=dict)
+    grasp_blend_s: float = 0.5
 
 
 class GenerateConfig(_Config):

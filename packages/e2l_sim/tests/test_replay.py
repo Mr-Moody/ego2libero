@@ -16,6 +16,7 @@ from e2l_sim.replay import (
     hold_at_grip_changes,
     libero_state,
     resample_segment,
+    snap_grasp,
     transit,
 )
 from e2l_sim.scene import table_to_sim
@@ -65,6 +66,23 @@ def test_carry_targets_move_the_held_object_along_its_demo_path():
     # the object the robot holds ends up where the demo's object was, relative to the reference
     np.testing.assert_allclose(T @ inv_T(actual), T_ref_ee @ inv_T(demo_grasp), atol=1e-12)
     np.testing.assert_allclose(carry_targets(T_ref_ee, demo_grasp, demo_grasp), T_ref_ee)
+
+
+def test_snap_grasp_blends_the_approach_onto_the_rim():
+    # Human approach descends to a grasp 7 cm out at 90 deg, 2 cm too high, yawed 0.3 rad off.
+    R = rotvec_to_matrix(np.array([np.pi, 0, 0])) @ rotvec_to_matrix(np.array([0, 0, 0.3]))
+    T = make_T(R, np.linspace([0.0, 0.07, 0.2], [0.0, 0.07, 0.065], 20))
+    grip = np.r_[-np.ones(17), np.ones(3)]
+    out = snap_grasp(T, grip, radius=0.05, height=0.045, blend_steps=5)
+    np.testing.assert_allclose(out[:12], T[:12])  # untouched before the blend window
+    np.testing.assert_allclose(out[17:, :3, 3], np.tile([0.0, 0.05, 0.045], (3, 1)), atol=1e-12)
+    np.testing.assert_allclose(out[17, :3, 2], [0, 0, -1], atol=1e-12)  # top-down
+    assert abs(out[17, :3, 0] @ [0, 1, 0]) == pytest.approx(1.0)  # fingers close radially
+    assert out[17, :3, 0] @ T[17, :3, 0] > 0  # the half turn nearest the human yaw
+    step = np.linalg.norm(np.diff(out[10:18, :3, 3], axis=0), axis=1)
+    assert step.max() < 0.02  # no jump into the grasp
+    np.testing.assert_allclose(snap_grasp(T, -np.ones(20), 0.05, 0.045, 5), T)  # no grasp
+    np.testing.assert_allclose(snap_grasp(T, np.ones(20), 0.05, 0.045, 5), T)  # a carry
 
 
 def test_hold_at_grip_changes_arrives_open_then_closes():

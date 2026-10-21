@@ -3,7 +3,13 @@
 import numpy as np
 
 from e2l_common.config import SimConfig
-from e2l_common.geometry import interpolate_poses, inv_T
+from e2l_common.geometry import (
+    interpolate_poses,
+    inv_T,
+    make_T,
+    matrix_to_rotvec,
+    rotvec_to_matrix,
+)
 from e2l_common.schemas import RobotSegment, RobotSegments, SimEpisode
 from e2l_sim.control import GRIPPER_CLOSED, GRIPPER_OPEN, ee_pose, pose_error, track
 from e2l_sim.env import make_env
@@ -62,6 +68,39 @@ def hold_at_grip_changes(T: np.ndarray, grip: np.ndarray, steps: int):
     )
 
 
+def snap_grasp(
+    T_obj_ee: np.ndarray, grip: np.ndarray, radius: float, height: float, blend_steps: int
+) -> np.ndarray:
+    """Move a segment's grasp (its first closed target, if it starts open) onto the object's rim:
+    the circle of `radius` at `height` in the object frame, at the human grasp's angle around
+    it, top-down with the fingers closing radially (the half turn nearest the human yaw). The
+    `blend_steps` targets before it shift towards the correction with a smoothstep weight, so the
+    human approach is kept until the last moment; later targets hold the grasp."""
+    closed = np.flatnonzero(np.asarray(grip) == GRIPPER_CLOSED)
+    if len(closed) == 0 or closed[0] == 0:
+        return T_obj_ee
+    g = closed[0]
+    p, x = T_obj_ee[g, :3, 3], T_obj_ee[g, :3, 0]
+    radial = np.array([p[0], p[1], 0.0]) / max(np.hypot(p[0], p[1]), 1e-9)
+    radial = radial if radial @ x >= 0 else -radial
+    down = np.array([0.0, 0.0, -1.0])
+    sign = 1.0 if radial @ p >= 0 else -1.0  # the rim point on the human's side
+    T_grasp = make_T(
+        np.column_stack([radial, np.cross(down, radial), down]),
+        sign * radius * radial + [0.0, 0.0, height],
+    )
+    out = T_obj_ee.copy()
+    out[g:] = T_grasp
+    dp = T_grasp[:3, 3] - p
+    dr = matrix_to_rotvec(T_grasp[:3, :3] @ T_obj_ee[g, :3, :3].T)
+    for i in range(max(0, g - blend_steps), g):
+        u = (i - (g - blend_steps)) / blend_steps
+        w = u * u * (3.0 - 2.0 * u)
+        out[i, :3, :3] = rotvec_to_matrix(w * dr) @ T_obj_ee[i, :3, :3]
+        out[i, :3, 3] = T_obj_ee[i, :3, 3] + w * dp
+    return out
+
+
 def carry_targets(
     T_ref_ee: np.ndarray, T_held_ee_demo: np.ndarray, T_held_ee_actual: np.ndarray
 ) -> np.ndarray:
@@ -111,6 +150,9 @@ def replay(
             name = sim_object(seg.ref_object, cfg)
             T_obj_ee, grip = resample_segment(seg, segments.fps, cfg.control_freq)
             poses = object_poses(env)
+            if name in cfg.rim_grasp:
+                blend = max(1, round(cfg.grasp_blend_s * cfg.control_freq))
+                T_obj_ee = snap_grasp(T_obj_ee, grip, *cfg.rim_grasp[name], blend)
             if (
                 prev is not None
                 and seg.gripper[0] == GRIPPER_CLOSED
