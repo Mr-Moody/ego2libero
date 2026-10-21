@@ -17,6 +17,7 @@ from e2l_sim.scene import object_poses, set_object_poses
 
 SETTLE_STEPS = 10  # no-op steps after teleporting objects, as LiberoEnv does after reset
 TRANSIT_ROT_SPEED = 1.5  # rad/s
+REGRIP_MAX_SLIP = 0.02  # m; a larger change of grasp before the set-down is a drop
 
 
 def libero_state(obs: dict) -> np.ndarray:
@@ -325,8 +326,10 @@ def replay(
                     if k >= len(T_sim_ee) or budget <= 0 or (success and stop_on_success):
                         break
                     # the object may have slipped in the fingers: re-measure the grasp and aim
-                    # the set-down with it
-                    T_held_ee = inv_T(object_poses(env)[held_name]) @ ee_pose(obs)
+                    # the set-down with it (unless it moved so far that it was dropped)
+                    T_now = inv_T(object_poses(env)[held_name]) @ ee_pose(obs)
+                    if pose_error(T_now, T_held_ee)[0] < REGRIP_MAX_SLIP:
+                        T_held_ee = T_now
                     T_obj_ee = carry_targets(T_obj_held[k:], T_held_ee)
                     T_obj_ee[:, 2, 3] += lift[k:]
                     targets, grips = poses[name] @ T_obj_ee, grip[k:]
