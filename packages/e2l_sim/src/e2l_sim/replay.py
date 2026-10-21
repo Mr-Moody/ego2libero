@@ -33,12 +33,14 @@ def libero_state(obs: dict) -> np.ndarray:
 
 
 def resample_segment(seg: RobotSegment, fps: float, control_freq: float):
-    """T_obj_ee (M,4,4) and gripper (M,) at the demo fps -> the control rate."""
+    """T_obj_ee (M,4,4), gripper (M,) and T_obj_held (M,4,4, or None) at the demo fps -> the
+    control rate."""
     t = np.arange(len(seg.T_obj_ee)) / fps
     t_query = np.arange(0.0, t[-1] + 1e-9, 1.0 / control_freq)
     T = interpolate_poses(t, seg.T_obj_ee, t_query)
+    held = None if seg.T_obj_held is None else interpolate_poses(t, seg.T_obj_held, t_query)
     idx = np.minimum(np.round(t_query * fps).astype(int), len(seg.gripper) - 1)
-    return T, np.asarray(seg.gripper, dtype=np.float64)[idx]
+    return T, np.asarray(seg.gripper, dtype=np.float64)[idx], held
 
 
 def transit(T_from: np.ndarray, T_to: np.ndarray, cfg: SimConfig) -> np.ndarray:
@@ -101,13 +103,11 @@ def snap_grasp(
     return out
 
 
-def carry_targets(
-    T_ref_ee: np.ndarray, T_held_ee_demo: np.ndarray, T_held_ee_actual: np.ndarray
-) -> np.ndarray:
-    """Re-attach a carry segment (M,4,4) to the grasp the robot actually made: the held object
-    follows its demo path relative to the reference object (T_ref_ee @ inv(T_held_ee_demo)),
-    and the end effector holds it as it does now (T_held_ee_actual)."""
-    return T_ref_ee @ inv_T(T_held_ee_demo) @ T_held_ee_actual
+def carry_targets(T_ref_held: np.ndarray, T_held_ee: np.ndarray) -> np.ndarray:
+    """End-effector targets (M,4,4) that move the held object along its demo path relative to the
+    reference object, T_ref_held (M,4,4), while holding it as the robot actually does now,
+    T_held_ee (4,4)."""
+    return T_ref_held @ T_held_ee
 
 
 def sim_object(name: str, cfg: SimConfig) -> str:
@@ -129,8 +129,9 @@ def replay(
     name -> (4,4)) overrides some or all of them. Each segment is anchored to its reference
     object's pose at the moment the segment starts, as in MimicGen, and is reached from the
     current grip-site pose by a straight `transit`. A segment that starts with the gripper
-    closed carries the previous segment's object: it is re-attached to the grasp measured in the
-    sim at its start (`carry_targets`), so the object, not the gripper, follows the demo."""
+    closed carries the previous segment's object: the object follows its demo path (its own track,
+    `T_obj_held`, else the hand path through the demo grasp) and the gripper holds it as measured
+    in the sim at the segment's start (`carry_targets`)."""
     env = make_env(cfg, episode_index=episode_index)
     try:
         obs, _ = env.reset(seed=cfg.seed)
@@ -148,7 +149,7 @@ def replay(
             if budget <= 0 or (success and stop_on_success):
                 break
             name = sim_object(seg.ref_object, cfg)
-            T_obj_ee, grip = resample_segment(seg, segments.fps, cfg.control_freq)
+            T_obj_ee, grip, T_obj_held = resample_segment(seg, segments.fps, cfg.control_freq)
             poses = object_poses(env)
             if name in cfg.rim_grasp:
                 blend = max(1, round(cfg.grasp_blend_s * cfg.control_freq))
@@ -159,7 +160,9 @@ def replay(
                 and prev.ref_object != seg.ref_object
             ):
                 held = poses[sim_object(prev.ref_object, cfg)]
-                T_obj_ee = carry_targets(T_obj_ee, prev.T_obj_ee[-1], inv_T(held) @ ee_pose(obs))
+                if T_obj_held is None:  # no object track: the hand path and the demo grasp
+                    T_obj_held = T_obj_ee @ inv_T(prev.T_obj_ee[-1])
+                T_obj_ee = carry_targets(T_obj_held, inv_T(held) @ ee_pose(obs))
             prev = seg
             T_sim_ee = poses[name] @ T_obj_ee
             T_lead = transit(ee_pose(obs), T_sim_ee[0], cfg)

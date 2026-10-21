@@ -41,7 +41,8 @@ def test_resample_segment_to_control_rate():
     T = make_T(np.eye(3), np.linspace([0, 0, 0], [0.1, 0, 0], 11))  # 1 s at 10 fps
     grip = np.r_[-np.ones(6), np.ones(5)]
     seg = RobotSegment(ref_object="bowl", T_obj_ee=T, gripper=grip, feasible=np.ones(11, bool))
-    T20, g20 = resample_segment(seg, fps=10.0, control_freq=20.0)
+    T20, g20, held = resample_segment(seg, fps=10.0, control_freq=20.0)
+    assert held is None
     assert len(T20) == len(g20) == 21
     np.testing.assert_allclose(T20[1, :3, 3], [0.005, 0, 0])
     assert g20[0] == -1 and g20[-1] == 1 and set(np.unique(g20)) == {-1.0, 1.0}
@@ -59,13 +60,24 @@ def test_transit_speed_and_endpoints():
 
 
 def test_carry_targets_move_the_held_object_along_its_demo_path():
-    T_ref_ee = np.stack([make_T(t=np.array([0.1 * i, 0.0, 0.2])) for i in range(3)])
-    demo_grasp = make_T(rotvec_to_matrix(np.array([np.pi, 0.0, 0.0])), np.array([0.07, 0, 0.05]))
-    actual = make_T(rotvec_to_matrix(np.array([np.pi, 0.0, 0.3])), np.array([0.04, 0.01, 0.03]))
-    T = carry_targets(T_ref_ee, demo_grasp, actual)
+    T_ref_held = np.stack([make_T(t=np.array([0.1 * i, 0.0, 0.2])) for i in range(3)])
+    grasp = make_T(rotvec_to_matrix(np.array([np.pi, 0.0, 0.3])), np.array([0.04, 0.01, 0.03]))
+    T = carry_targets(T_ref_held, grasp)
     # the object the robot holds ends up where the demo's object was, relative to the reference
-    np.testing.assert_allclose(T @ inv_T(actual), T_ref_ee @ inv_T(demo_grasp), atol=1e-12)
-    np.testing.assert_allclose(carry_targets(T_ref_ee, demo_grasp, demo_grasp), T_ref_ee)
+    np.testing.assert_allclose(T @ inv_T(grasp), T_ref_held, atol=1e-12)
+
+
+def test_resample_segment_resamples_the_held_object_path():
+    T = make_T(np.eye(3), np.linspace([0, 0, 0], [0.1, 0, 0], 11))
+    seg = RobotSegment(
+        ref_object="plate",
+        T_obj_ee=T,
+        gripper=np.ones(11),
+        feasible=np.ones(11, bool),
+        T_obj_held=T @ make_T(t=np.array([0, 0, -0.05])),
+    )
+    T20, _, held = resample_segment(seg, fps=10.0, control_freq=20.0)
+    np.testing.assert_allclose(held[:, :3, 3], T20[:, :3, 3] - [0, 0, 0.05], atol=1e-12)
 
 
 def test_snap_grasp_blends_the_approach_onto_the_rim():
