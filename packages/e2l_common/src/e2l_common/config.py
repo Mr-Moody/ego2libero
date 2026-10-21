@@ -135,6 +135,8 @@ class SimConfig(_Config):
     # snapped there, blending the human approach in over `grasp_blend_s` (see replay.snap_grasp).
     rim_grasp: dict[str, tuple[float, float]] = Field(default_factory=dict)
     grasp_blend_s: float = 0.5
+    grasp_lift: float = 0.0  # m; descend onto the grasp from this far above it
+    grasp_descend_s: float = 0.0  # over this long (0: no straight descent)
 
 
 class GenerateConfig(_Config):

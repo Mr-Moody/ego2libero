@@ -37,6 +37,8 @@ def resample_segment(seg: RobotSegment, fps: float, control_freq: float):
     control rate."""
     t = np.arange(len(seg.T_obj_ee)) / fps
     t_query = np.arange(0.0, t[-1] + 1e-9, 1.0 / control_freq)
+    if t[-1] - t_query[-1] > 1e-9:  # end on the last frame: it is often the grasp or release
+        t_query = np.append(t_query, t[-1])
     T = interpolate_poses(t, seg.T_obj_ee, t_query)
     held = None if seg.T_obj_held is None else interpolate_poses(t, seg.T_obj_held, t_query)
     idx = np.minimum(np.round(t_query * fps).astype(int), len(seg.gripper) - 1)
@@ -71,13 +73,22 @@ def hold_at_grip_changes(T: np.ndarray, grip: np.ndarray, steps: int):
 
 
 def snap_grasp(
-    T_obj_ee: np.ndarray, grip: np.ndarray, radius: float, height: float, blend_steps: int
+    T_obj_ee: np.ndarray,
+    grip: np.ndarray,
+    radius: float,
+    height: float,
+    blend_steps: int,
+    lift: float = 0.0,
+    descend_steps: int = 0,
 ) -> np.ndarray:
     """Move a segment's grasp (its first closed target, if it starts open) onto the object's rim:
     the circle of `radius` at `height` in the object frame, at the human grasp's angle around
-    it, top-down with the fingers closing radially (the half turn nearest the human yaw). The
-    `blend_steps` targets before it shift towards the correction with a smoothstep weight, so the
-    human approach is kept until the last moment; later targets hold the grasp."""
+    it, top-down with the fingers closing radially (the half turn nearest the human yaw).
+
+    The last `descend_steps` targets before the grasp drop straight onto it from `lift` above,
+    so the fingers clear the object's wall; the `blend_steps` before those shift the human
+    approach towards that pre-grasp pose with a smoothstep weight, so it is kept until the last
+    moment. Later targets hold the grasp."""
     closed = np.flatnonzero(np.asarray(grip) == GRIPPER_CLOSED)
     if len(closed) == 0 or closed[0] == 0:
         return T_obj_ee
@@ -93,10 +104,17 @@ def snap_grasp(
     )
     out = T_obj_ee.copy()
     out[g:] = T_grasp
-    dp = T_grasp[:3, 3] - p
-    dr = matrix_to_rotvec(T_grasp[:3, :3] @ T_obj_ee[g, :3, :3].T)
-    for i in range(max(0, g - blend_steps), g):
-        u = (i - (g - blend_steps)) / blend_steps
+    d = max(0, g - descend_steps)
+    T_pre = T_grasp.copy()
+    if d < g:
+        T_pre[2, 3] += lift
+        for i in range(d, g):
+            out[i] = T_grasp
+            out[i, :3, 3] = T_pre[:3, 3] + (i - d) / (g - d) * (T_grasp[:3, 3] - T_pre[:3, 3])
+    dp = T_pre[:3, 3] - T_obj_ee[d, :3, 3]
+    dr = matrix_to_rotvec(T_pre[:3, :3] @ T_obj_ee[d, :3, :3].T)
+    for i in range(max(0, d - blend_steps), d):
+        u = (i - (d - blend_steps)) / blend_steps
         w = u * u * (3.0 - 2.0 * u)
         out[i, :3, :3] = rotvec_to_matrix(w * dr) @ T_obj_ee[i, :3, :3]
         out[i, :3, 3] = T_obj_ee[i, :3, 3] + w * dp
@@ -152,8 +170,14 @@ def replay(
             T_obj_ee, grip, T_obj_held = resample_segment(seg, segments.fps, cfg.control_freq)
             poses = object_poses(env)
             if name in cfg.rim_grasp:
-                blend = max(1, round(cfg.grasp_blend_s * cfg.control_freq))
-                T_obj_ee = snap_grasp(T_obj_ee, grip, *cfg.rim_grasp[name], blend)
+                T_obj_ee = snap_grasp(
+                    T_obj_ee,
+                    grip,
+                    *cfg.rim_grasp[name],
+                    blend_steps=max(1, round(cfg.grasp_blend_s * cfg.control_freq)),
+                    lift=cfg.grasp_lift,
+                    descend_steps=round(cfg.grasp_descend_s * cfg.control_freq),
+                )
             if (
                 prev is not None
                 and seg.gripper[0] == GRIPPER_CLOSED

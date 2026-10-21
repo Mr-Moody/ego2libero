@@ -35,7 +35,10 @@ max_steps_per_target: 3                  # tracking steps per target while the g
 tracking_gain: 3.0                       # pose error -> action gain (OSC lags a single delta)
 track_pos_tol: 0.005                     # m; a target further than this gets extra steps
 track_rot_tol: 0.05                      # rad
-# Grasp blend: the human approach is kept, but its last `grasp_blend_s` bends onto a top-down
-# rim grasp at the human's angle around the rim. Values from the scripted grasp (scripted.py).
+# Grasp blend: the human approach is kept, but its end bends onto a pre-grasp above a top-down
+# rim grasp at the human's angle around the rim, then descends straight onto it. Rim values
+# from the scripted grasp (scripted.py).
 rim_grasp: {akita_black_bowl_1: [0.05, 0.045]}   # radius, height in the object frame (m)
-grasp_blend_s: 0.5
+grasp_blend_s: 0.5                       # s, human approach -> pre-grasp
+grasp_lift: 0.06                         # m; pre-grasp height above the grasp: clears the wall
+grasp_descend_s: 0.4                     # s, straight down from the pre-grasp

@@ -48,6 +48,16 @@ def test_resample_segment_to_control_rate():
     assert g20[0] == -1 and g20[-1] == 1 and set(np.unique(g20)) == {-1.0, 1.0}
 
 
+def test_resample_segment_keeps_the_last_frame_off_the_control_grid():
+    # 41 frames at 30 fps end at 4/3 s, between 20 Hz ticks; the grasp is the last frame only
+    T = make_T(np.eye(3), np.linspace([0, 0, 0], [0.1, 0, 0], 41))
+    grip = np.r_[-np.ones(40), 1.0]
+    seg = RobotSegment(ref_object="bowl", T_obj_ee=T, gripper=grip, feasible=np.ones(41, bool))
+    T20, g20, _ = resample_segment(seg, fps=30.0, control_freq=20.0)
+    assert g20[-1] == 1 and g20[-2] == -1
+    np.testing.assert_allclose(T20[-1], T[-1], atol=1e-12)
+
+
 def test_transit_speed_and_endpoints():
     cfg = SimConfig(transit_speed=0.25, control_freq=20)
     T0 = make_T(np.eye(3), [0, 0, 1.0])
@@ -95,6 +105,19 @@ def test_snap_grasp_blends_the_approach_onto_the_rim():
     assert step.max() < 0.02  # no jump into the grasp
     np.testing.assert_allclose(snap_grasp(T, -np.ones(20), 0.05, 0.045, 5), T)  # no grasp
     np.testing.assert_allclose(snap_grasp(T, np.ones(20), 0.05, 0.045, 5), T)  # a carry
+
+
+def test_snap_grasp_descends_straight_onto_the_rim_from_above():
+    R = rotvec_to_matrix(np.array([np.pi, 0, 0]))
+    T = make_T(R, np.linspace([0.0, 0.2, 0.03], [0.0, 0.07, 0.03], 30))  # low, from the side
+    grip = np.r_[-np.ones(25), np.ones(5)]
+    out = snap_grasp(T, grip, 0.05, 0.045, blend_steps=6, lift=0.06, descend_steps=5)
+    np.testing.assert_allclose(out[:14], T[:14])
+    np.testing.assert_allclose(out[20, :3, 3], [0.0, 0.05, 0.105], atol=1e-12)  # pre-grasp
+    xy = out[20:26, :3, 3][:, :2]
+    np.testing.assert_allclose(xy, np.tile([0.0, 0.05], (6, 1)), atol=1e-12)  # straight down
+    assert np.all(np.diff(out[20:26, 2, 3]) < 0)
+    np.testing.assert_allclose(out[25:, :3, 3], np.tile([0.0, 0.05, 0.045], (5, 1)), atol=1e-12)
 
 
 def test_hold_at_grip_changes_arrives_open_then_closes():
