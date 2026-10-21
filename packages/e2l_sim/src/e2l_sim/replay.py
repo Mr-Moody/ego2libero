@@ -176,6 +176,8 @@ def replay(
                 cfg.max_steps_per_target,
                 obs=obs,
                 gain=cfg.tracking_gain,
+                pos_tol=cfg.track_pos_tol,
+                rot_tol=cfg.track_rot_tol,
                 max_steps=budget,
                 stop_on_success=stop_on_success,
             )
