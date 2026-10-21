@@ -140,7 +140,9 @@ class SimConfig(_Config):
     approach_radius: float | None = None  # m; keep only the approach within this of the grasp
     carry_lift: float = 0.0  # m; extra height while carrying, ramped out at the set-down
     carry_ramp_s: float = 0.5
-    carry_warp: bool = False  # start the carried object's path where it is (`warp_start`)
+    carry_warp: bool = False  # start the carried object's path where it is (`warp_carry`)
+    # sim reference object -> plan-view point (its frame) where warped carries set down
+    place_xy: dict[str, tuple[float, float]] = Field(default_factory=dict)
 
 
 class GenerateConfig(_Config):

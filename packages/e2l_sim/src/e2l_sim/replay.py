@@ -147,23 +147,34 @@ def carry_lift(n: int, lift: float, ramp_steps: int) -> np.ndarray:
     return lift * np.clip((n - 1 - np.arange(n)) / max(1, ramp_steps), 0.0, 1.0)
 
 
-def warp_start(T_ref_held: np.ndarray, T_ref_start: np.ndarray, n: int) -> np.ndarray:
+def warp_carry(
+    T_ref_held: np.ndarray,
+    T_ref_start: np.ndarray,
+    n: int,
+    end_xy: np.ndarray | None = None,
+) -> np.ndarray:
     """Shift a held object's demo path (M,4,4) so it starts at T_ref_start, the object's actual
     pose, instead of where the demo's object started relative to the reference. The shift fades
     with a smoothstep in the distance travelled and is gone at index n - 1 (the set-down), so the
-    path keeps the human's shape but needs no detour to its demo start and ends where it did."""
+    path keeps the human's shape but needs no detour to its demo start. With `end_xy`, a second
+    shift fades in the other way so the set-down lands at that point in plan view (LIBERO's `On`
+    wants the object within 3 cm of the reference's centre); later targets get all of it."""
     out = T_ref_held.copy()
     n = min(n, len(out))
     if n < 2:
         return out
     dp = T_ref_start[:3, 3] - T_ref_held[0, :3, 3]
     dr = matrix_to_rotvec(T_ref_start[:3, :3] @ T_ref_held[0, :3, :3].T)
+    de = np.zeros(3)
+    if end_xy is not None:
+        de[:2] = np.asarray(end_xy) - T_ref_held[n - 1, :2, 3]
     s = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(T_ref_held[:n, :3, 3], axis=0), axis=1))]
     u = s / s[-1] if s[-1] > 1e-9 else np.arange(n) / (n - 1)
-    w = 1.0 - u * u * (3.0 - 2.0 * u)
+    w = u * u * (3.0 - 2.0 * u)
     for i in range(n):
-        out[i, :3, :3] = rotvec_to_matrix(w[i] * dr) @ T_ref_held[i, :3, :3]
-        out[i, :3, 3] = T_ref_held[i, :3, 3] + w[i] * dp
+        out[i, :3, :3] = rotvec_to_matrix((1.0 - w[i]) * dr) @ T_ref_held[i, :3, :3]
+        out[i, :3, 3] = T_ref_held[i, :3, 3] + (1.0 - w[i]) * dp + w[i] * de
+    out[n:, :3, 3] += de
     return out
 
 
@@ -239,7 +250,9 @@ def replay(
                 opened = np.flatnonzero(grip == GRIPPER_OPEN)
                 n = int(opened[0]) + 1 if len(opened) else len(grip)
                 if cfg.carry_warp:
-                    T_obj_held = warp_start(T_obj_held, inv_T(poses[name]) @ held, n)
+                    T_obj_held = warp_carry(
+                        T_obj_held, inv_T(poses[name]) @ held, n, cfg.place_xy.get(name)
+                    )
                 T_obj_ee = carry_targets(T_obj_held, inv_T(held) @ ee_pose(obs))
                 ramp = round(cfg.carry_ramp_s * cfg.control_freq)
                 T_obj_ee[:n, 2, 3] += carry_lift(n, cfg.carry_lift, ramp)

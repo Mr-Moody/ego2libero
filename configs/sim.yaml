@@ -50,3 +50,6 @@ carry_ramp_s: 0.5                        # s
 # The demo path starts where the real bowl was relative to the plate; bend it to start where
 # the sim bowl is, fading back onto the demo path by the set-down.
 carry_warp: true
+# LIBERO's On() needs the bowl within 3 cm of the plate centre; the demos end within ~2 cm, so
+# grip slip in the sim tips some out. Fade the set-down onto the centre.
+place_xy: {plate_1: [0.0, 0.0]}
