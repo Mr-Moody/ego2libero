@@ -12,6 +12,7 @@ from e2l_sim.control import pose_error
 from e2l_sim.libero_setup import libero_available
 from e2l_sim.render import save_video, upright
 from e2l_sim.replay import (
+    carry_lift,
     carry_targets,
     hold_at_grip_changes,
     libero_state,
@@ -130,6 +131,12 @@ def test_trim_approach_starts_where_the_path_last_enters_the_radius():
     np.testing.assert_allclose(g_out, [-1, -1, 1])
     T_out, g_out = trim_approach(T, -np.ones(7), radius=0.15)  # no grasp: unchanged
     assert len(T_out) == 7
+
+
+def test_carry_lift_is_full_until_the_set_down_then_ramps_to_zero():
+    z = carry_lift(10, lift=0.04, ramp_steps=4)
+    np.testing.assert_allclose(z, [0.04] * 6 + [0.03, 0.02, 0.01, 0.0])
+    np.testing.assert_allclose(carry_lift(3, lift=0.04, ramp_steps=4), [0.02, 0.01, 0.0])
 
 
 def test_hold_at_grip_changes_arrives_open_then_closes():

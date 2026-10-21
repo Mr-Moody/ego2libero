@@ -43,3 +43,7 @@ grasp_blend_s: 0.5                       # s, human approach -> pre-grasp
 grasp_lift: 0.06                         # m; pre-grasp height above the grasp: clears the wall
 grasp_descend_s: 0.4                     # s, straight down from the pre-grasp
 approach_radius: 0.15                    # m; earlier approach is replaced by the transit
+# Carries: the demos barely lift the bowl over the flat real plate (1-3 cm after scaling); the
+# sim plate has a rim. Lift straight up first, carry this much higher, ramp it out at set-down.
+carry_lift: 0.04                         # m
+carry_ramp_s: 0.5                        # s

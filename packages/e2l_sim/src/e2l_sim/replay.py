@@ -137,6 +137,13 @@ def snap_grasp(
     return out
 
 
+def carry_lift(n: int, lift: float, ramp_steps: int) -> np.ndarray:
+    """(n,) heights added to a carry that ends in its set-down at index n - 1: `lift` until the
+    last `ramp_steps` targets, then a linear ramp to zero, so the carried object clears the
+    reference object's rim but is set down where the demo set it."""
+    return lift * np.clip((n - 1 - np.arange(n)) / max(1, ramp_steps), 0.0, 1.0)
+
+
 def carry_targets(T_ref_held: np.ndarray, T_held_ee: np.ndarray) -> np.ndarray:
     """End-effector targets (M,4,4) that move the held object along its demo path relative to the
     reference object, T_ref_held (M,4,4), while holding it as the robot actually does now,
@@ -165,7 +172,9 @@ def replay(
     current grip-site pose by a straight `transit`. A segment that starts with the gripper
     closed carries the previous segment's object: the object follows its demo path (its own track,
     `T_obj_held`, else the hand path through the demo grasp) and the gripper holds it as measured
-    in the sim at the segment's start (`carry_targets`)."""
+    in the sim at the segment's start (`carry_targets`). The object is first lifted straight up
+    by `cfg.carry_lift` and carried that much higher than the demo until the set-down
+    (`carry_lift`)."""
     env = make_env(cfg, episode_index=episode_index)
     try:
         obs, _ = env.reset(seed=cfg.seed)
@@ -205,9 +214,18 @@ def replay(
                 if T_obj_held is None:  # no object track: the hand path and the demo grasp
                     T_obj_held = T_obj_ee @ inv_T(prev.T_obj_ee[-1])
                 T_obj_ee = carry_targets(T_obj_held, inv_T(held) @ ee_pose(obs))
+                opened = np.flatnonzero(grip == GRIPPER_OPEN)
+                n = int(opened[0]) + 1 if len(opened) else len(grip)
+                ramp = round(cfg.carry_ramp_s * cfg.control_freq)
+                T_obj_ee[:n, 2, 3] += carry_lift(n, cfg.carry_lift, ramp)
+                T_up = ee_pose(obs)  # lift straight off the table before moving across it
+                T_up[2, 3] += cfg.carry_lift
+                T_lead = transit(ee_pose(obs), T_up, cfg)
+            else:
+                T_up, T_lead = ee_pose(obs), np.empty((0, 4, 4))
             prev = seg
             T_sim_ee = poses[name] @ T_obj_ee
-            T_lead = transit(ee_pose(obs), T_sim_ee[0], cfg)
+            T_lead = np.concatenate([T_lead, transit(T_up, T_sim_ee[0], cfg)])
             targets = np.concatenate([T_lead, T_sim_ee])
             grips = np.concatenate([np.full(len(T_lead), gripper), grip])
             targets, grips = hold_at_grip_changes(targets, grips, cfg.gripper_settle_steps)
