@@ -169,6 +169,7 @@ def warp_carry(
     n: int,
     end_xy: np.ndarray | None = None,
     end_yaw: float = 0.0,
+    keep_turn: bool = False,
 ) -> np.ndarray:
     """Shift a held object's demo path (M,4,4) so it starts at T_ref_start, the object's actual
     pose, instead of where the demo's object started relative to the reference. The shift fades
@@ -176,7 +177,9 @@ def warp_carry(
     path keeps the human's shape but needs no detour to its demo start. With `end_xy`, a second
     shift fades in the other way so the set-down lands at that point in plan view (LIBERO's `On`
     wants the object within 3 cm of the reference's centre), and `end_yaw` (rad) turns the object
-    about its vertical axis the same way; later targets get all of both."""
+    about its vertical axis the same way; later targets get all of both. With `keep_turn` the
+    start's rotation offset is kept throughout instead of fading: for a round object, whose demo
+    yaw (where its tag was) means nothing, the path keeps only the human's turns."""
     out = T_ref_held.copy()
     n = min(n, len(out))
     if n < 2:
@@ -191,7 +194,8 @@ def warp_carry(
     w = u * u * (3.0 - 2.0 * u)
     w = np.r_[w, np.ones(len(out) - n)]
     for i in range(len(out)):
-        R = rotvec_to_matrix([0.0, 0.0, w[i] * end_yaw]) @ rotvec_to_matrix((1.0 - w[i]) * dr)
+        turn = 1.0 if keep_turn else 1.0 - w[i]
+        R = rotvec_to_matrix([0.0, 0.0, w[i] * end_yaw]) @ rotvec_to_matrix(turn * dr)
         out[i, :3, :3] = R @ T_ref_held[i, :3, :3]
         out[i, :3, 3] = T_ref_held[i, :3, 3] + (1.0 - w[i]) * dp + w[i] * de
     return out
@@ -277,7 +281,8 @@ def replay(
                 and seg.gripper[0] == GRIPPER_CLOSED
                 and prev.ref_object != seg.ref_object
             ):
-                held = poses[sim_object(prev.ref_object, cfg)]
+                held_name = sim_object(prev.ref_object, cfg)
+                held = poses[held_name]
                 if T_obj_held is None:  # no object track: the hand path and the demo grasp
                     T_obj_held = T_obj_ee @ inv_T(prev.T_obj_ee[-1])
                 opened = np.flatnonzero(grip == GRIPPER_OPEN)
@@ -285,7 +290,10 @@ def replay(
                 T_held_ee = inv_T(held) @ ee_pose(obs)
                 if cfg.carry_warp:
                     end_xy = cfg.place_xy.get(name)
-                    T_obj_held = warp_carry(T_obj_held, inv_T(poses[name]) @ held, n, end_xy)
+                    round_ = held_name in cfg.rim_grasp  # rim-grasped objects are round
+                    T_obj_held = warp_carry(
+                        T_obj_held, inv_T(poses[name]) @ held, n, end_xy, keep_turn=round_
+                    )
                     hand = (poses[name] @ T_obj_held[n - 1])[:3, :3] @ T_held_ee[:3, 3]
                     yaw = keepout_yaw(np.arctan2(hand[1], hand[0]), cfg.release_keepout)
                     if yaw:  # turn the (symmetric) object so the hand sets it down clear

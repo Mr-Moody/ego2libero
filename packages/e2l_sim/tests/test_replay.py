@@ -174,6 +174,14 @@ def test_warp_carry_turns_the_object_by_end_yaw_at_the_set_down():
     np.testing.assert_allclose(out[:, :3, 3], path[:, :3, 3], atol=1e-12)
 
 
+def test_warp_carry_keeps_the_start_turn_for_a_round_object():
+    path = make_T(np.eye(3), np.linspace([0.2, 0.0, 0.01], [0.0, 0.0, 0.01], 11))
+    start = make_T(rotvec_to_matrix(np.array([0, 0, 2.0])), [0.25, 0.0, 0.01])
+    out = warp_carry(path, start, n=11, keep_turn=True)
+    np.testing.assert_allclose(out[:, :3, :3], np.tile(start[:3, :3], (11, 1, 1)), atol=1e-12)
+    np.testing.assert_allclose(out[-1, :3, 3], path[-1, :3, 3], atol=1e-12)
+
+
 def test_keepout_yaw_turns_to_the_nearest_edge():
     assert keepout_yaw(np.radians(-80), (-95.0, 45.0)) == pytest.approx(np.radians(30))
     assert keepout_yaw(np.radians(-120), (-95.0, 45.0)) == pytest.approx(np.radians(-20))
