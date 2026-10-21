@@ -138,6 +138,9 @@ class SimConfig(_Config):
     grasp_lift: float = 0.0  # m; descend onto the grasp from this far above it
     grasp_descend_s: float = 0.0  # over this long (0: no straight descent)
     approach_radius: float | None = None  # m; keep only the approach within this of the grasp
+    # (centre, half width) deg: sim-frame directions from the object's centre the rim grasp
+    # may not take; it is turned to the nearest edge
+    grasp_keepout: tuple[float, float] | None = None
     carry_lift: float = 0.0  # m; extra height while carrying, ramped out at the set-down
     carry_ramp_s: float = 0.5
     carry_warp: bool = False  # start the carried object's path where it is (`warp_carry`)

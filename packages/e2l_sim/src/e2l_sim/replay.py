@@ -97,12 +97,14 @@ def snap_grasp(
     lift: float = 0.0,
     descend_steps: int = 0,
     x_pref: np.ndarray | None = None,
+    keepout: tuple[float, float] | None = None,
 ) -> np.ndarray:
     """Move a segment's grasp (its first closed target, if it starts open) onto the object's rim:
     the circle of `radius` at `height` in the object frame, at the human grasp's angle around
-    it, top-down with the fingers closing radially. Of the two half turns that grip the same way,
-    take the one whose x axis is nearest `x_pref` (object frame; e.g. the gripper's current x, so
-    the wrist turns least), else nearest the human yaw.
+    it (turned out of `keepout`, an object-frame sector as in `keepout_yaw`), top-down with the
+    fingers closing radially. Of the two half turns that grip the same way, take the one whose
+    x axis is nearest `x_pref` (object frame; e.g. the gripper's current x, so the wrist turns
+    least), else nearest the human yaw.
 
     The last `descend_steps` targets before the grasp drop straight onto it from `lift` above,
     so the fingers clear the object's wall; the `blend_steps` before those shift the human
@@ -114,13 +116,14 @@ def snap_grasp(
         return T_obj_ee
     g = closed[0]
     p, x = T_obj_ee[g, :3, 3], T_obj_ee[g, :3, 0]
-    radial = np.array([p[0], p[1], 0.0]) / max(np.hypot(p[0], p[1]), 1e-9)
-    radial = radial if radial @ (x if x_pref is None else x_pref) >= 0 else -radial
+    angle = np.arctan2(p[1], p[0])
+    angle += keepout_yaw(angle, keepout)
+    rim = np.array([np.cos(angle), np.sin(angle), 0.0])
+    radial = rim if rim @ (x if x_pref is None else x_pref) >= 0 else -rim
     down = np.array([0.0, 0.0, -1.0])
-    sign = 1.0 if radial @ p >= 0 else -1.0  # the rim point on the human's side
     T_grasp = make_T(
         np.column_stack([radial, np.cross(down, radial), down]),
-        sign * radius * radial + [0.0, 0.0, height],
+        radius * rim + [0.0, 0.0, height],
     )
     out = T_obj_ee.copy()
     out[g:] = T_grasp
@@ -141,6 +144,16 @@ def snap_grasp(
     if d < g:  # the approach stays above the pre-grasp so the fingers clear the object's wall
         out[:d, 2, 3] = np.maximum(out[:d, 2, 3], T_pre[2, 3])
     return out
+
+
+def object_sector(
+    keepout: tuple[float, float] | None, T_sim_obj: np.ndarray
+) -> tuple[float, float] | None:
+    """A sim-frame (centre, half width) sector in degrees, in an object's frame (its yaw)."""
+    if keepout is None:
+        return None
+    yaw = np.degrees(np.arctan2(T_sim_obj[1, 0], T_sim_obj[0, 0]))
+    return (keepout[0] - yaw, keepout[1])
 
 
 def carry_lift(n: int, lift: float, ramp_steps: int) -> np.ndarray:
@@ -257,6 +270,7 @@ def replay(
                     lift=cfg.grasp_lift,
                     descend_steps=round(cfg.grasp_descend_s * cfg.control_freq),
                     x_pref=(inv_T(poses[name]) @ ee_pose(obs))[:3, 0],
+                    keepout=object_sector(cfg.grasp_keepout, poses[name]),
                 )
             if (
                 prev is not None

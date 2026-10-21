@@ -110,6 +110,12 @@ def test_snap_grasp_blends_the_approach_onto_the_rim():
     flip = snap_grasp(T, grip, 0.05, 0.045, 5, x_pref=-T[17, :3, 0])  # the other half turn
     np.testing.assert_allclose(flip[17, :3, 0], -out[17, :3, 0], atol=1e-12)
     np.testing.assert_allclose(flip[17:, :3, 3], out[17:, :3, 3], atol=1e-12)  # same grasp
+    kept = snap_grasp(T, grip, 0.05, 0.045, 5, keepout=(90.0, 30.0))  # turned out of the sector
+    np.testing.assert_allclose(
+        kept[17, :3, 3],
+        [0.05 * np.cos(np.radians(120)), 0.05 * np.sin(np.radians(120)), 0.045],
+        atol=1e-12,
+    )
     np.testing.assert_allclose(snap_grasp(T, -np.ones(20), 0.05, 0.045, 5), T)  # no grasp
     np.testing.assert_allclose(snap_grasp(T, np.ones(20), 0.05, 0.045, 5), T)  # a carry
 
