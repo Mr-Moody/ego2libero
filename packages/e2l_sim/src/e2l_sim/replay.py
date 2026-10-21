@@ -96,10 +96,13 @@ def snap_grasp(
     blend_steps: int,
     lift: float = 0.0,
     descend_steps: int = 0,
+    x_pref: np.ndarray | None = None,
 ) -> np.ndarray:
     """Move a segment's grasp (its first closed target, if it starts open) onto the object's rim:
     the circle of `radius` at `height` in the object frame, at the human grasp's angle around
-    it, top-down with the fingers closing radially (the half turn nearest the human yaw).
+    it, top-down with the fingers closing radially. Of the two half turns that grip the same way,
+    take the one whose x axis is nearest `x_pref` (object frame; e.g. the gripper's current x, so
+    the wrist turns least), else nearest the human yaw.
 
     The last `descend_steps` targets before the grasp drop straight onto it from `lift` above,
     so the fingers clear the object's wall; the `blend_steps` before those shift the human
@@ -112,7 +115,7 @@ def snap_grasp(
     g = closed[0]
     p, x = T_obj_ee[g, :3, 3], T_obj_ee[g, :3, 0]
     radial = np.array([p[0], p[1], 0.0]) / max(np.hypot(p[0], p[1]), 1e-9)
-    radial = radial if radial @ x >= 0 else -radial
+    radial = radial if radial @ (x if x_pref is None else x_pref) >= 0 else -radial
     down = np.array([0.0, 0.0, -1.0])
     sign = 1.0 if radial @ p >= 0 else -1.0  # the rim point on the human's side
     T_grasp = make_T(
@@ -253,6 +256,7 @@ def replay(
                     blend_steps=max(1, round(cfg.grasp_blend_s * cfg.control_freq)),
                     lift=cfg.grasp_lift,
                     descend_steps=round(cfg.grasp_descend_s * cfg.control_freq),
+                    x_pref=(inv_T(poses[name]) @ ee_pose(obs))[:3, 0],
                 )
             if (
                 prev is not None

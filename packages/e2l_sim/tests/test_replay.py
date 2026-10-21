@@ -107,6 +107,9 @@ def test_snap_grasp_blends_the_approach_onto_the_rim():
     assert out[17, :3, 0] @ T[17, :3, 0] > 0  # the half turn nearest the human yaw
     step = np.linalg.norm(np.diff(out[10:18, :3, 3], axis=0), axis=1)
     assert step.max() < 0.02  # no jump into the grasp
+    flip = snap_grasp(T, grip, 0.05, 0.045, 5, x_pref=-T[17, :3, 0])  # the other half turn
+    np.testing.assert_allclose(flip[17, :3, 0], -out[17, :3, 0], atol=1e-12)
+    np.testing.assert_allclose(flip[17:, :3, 3], out[17:, :3, 3], atol=1e-12)  # same grasp
     np.testing.assert_allclose(snap_grasp(T, -np.ones(20), 0.05, 0.045, 5), T)  # no grasp
     np.testing.assert_allclose(snap_grasp(T, np.ones(20), 0.05, 0.045, 5), T)  # a carry
 
