@@ -152,13 +152,15 @@ def warp_carry(
     T_ref_start: np.ndarray,
     n: int,
     end_xy: np.ndarray | None = None,
+    end_yaw: float = 0.0,
 ) -> np.ndarray:
     """Shift a held object's demo path (M,4,4) so it starts at T_ref_start, the object's actual
     pose, instead of where the demo's object started relative to the reference. The shift fades
     with a smoothstep in the distance travelled and is gone at index n - 1 (the set-down), so the
     path keeps the human's shape but needs no detour to its demo start. With `end_xy`, a second
     shift fades in the other way so the set-down lands at that point in plan view (LIBERO's `On`
-    wants the object within 3 cm of the reference's centre); later targets get all of it."""
+    wants the object within 3 cm of the reference's centre), and `end_yaw` (rad) turns the object
+    about its vertical axis the same way; later targets get all of both."""
     out = T_ref_held.copy()
     n = min(n, len(out))
     if n < 2:
@@ -171,11 +173,24 @@ def warp_carry(
     s = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(T_ref_held[:n, :3, 3], axis=0), axis=1))]
     u = s / s[-1] if s[-1] > 1e-9 else np.arange(n) / (n - 1)
     w = u * u * (3.0 - 2.0 * u)
-    for i in range(n):
-        out[i, :3, :3] = rotvec_to_matrix((1.0 - w[i]) * dr) @ T_ref_held[i, :3, :3]
+    w = np.r_[w, np.ones(len(out) - n)]
+    for i in range(len(out)):
+        R = rotvec_to_matrix([0.0, 0.0, w[i] * end_yaw]) @ rotvec_to_matrix((1.0 - w[i]) * dr)
+        out[i, :3, :3] = R @ T_ref_held[i, :3, :3]
         out[i, :3, 3] = T_ref_held[i, :3, 3] + (1.0 - w[i]) * dp + w[i] * de
-    out[n:, :3, 3] += de
     return out
+
+
+def keepout_yaw(direction: float, keepout: tuple[float, float] | None) -> float:
+    """Yaw (rad) that turns a plan-view `direction` (rad) out of `keepout`, a sector given as
+    (centre, half width) in degrees, to its nearest edge; 0 if it is outside or no sector."""
+    if keepout is None:
+        return 0.0
+    centre, half = np.radians(keepout[0]), np.radians(keepout[1])
+    off = (direction - centre + np.pi) % (2 * np.pi) - np.pi
+    if abs(off) >= half:
+        return 0.0
+    return (half if off >= 0 else -half) - off
 
 
 def carry_targets(T_ref_held: np.ndarray, T_held_ee: np.ndarray) -> np.ndarray:
@@ -249,11 +264,17 @@ def replay(
                     T_obj_held = T_obj_ee @ inv_T(prev.T_obj_ee[-1])
                 opened = np.flatnonzero(grip == GRIPPER_OPEN)
                 n = int(opened[0]) + 1 if len(opened) else len(grip)
+                T_held_ee = inv_T(held) @ ee_pose(obs)
                 if cfg.carry_warp:
-                    T_obj_held = warp_carry(
-                        T_obj_held, inv_T(poses[name]) @ held, n, cfg.place_xy.get(name)
-                    )
-                T_obj_ee = carry_targets(T_obj_held, inv_T(held) @ ee_pose(obs))
+                    end_xy = cfg.place_xy.get(name)
+                    T_obj_held = warp_carry(T_obj_held, inv_T(poses[name]) @ held, n, end_xy)
+                    hand = (poses[name] @ T_obj_held[n - 1])[:3, :3] @ T_held_ee[:3, 3]
+                    yaw = keepout_yaw(np.arctan2(hand[1], hand[0]), cfg.release_keepout)
+                    if yaw:  # turn the (symmetric) object so the hand sets it down clear
+                        T_obj_held = warp_carry(
+                            T_obj_held, T_obj_held[0], n, T_obj_held[n - 1, :2, 3], yaw
+                        )
+                T_obj_ee = carry_targets(T_obj_held, T_held_ee)
                 ramp = round(cfg.carry_ramp_s * cfg.control_freq)
                 T_obj_ee[:n, 2, 3] += carry_lift(n, cfg.carry_lift, ramp)
                 T_up = ee_pose(obs)  # lift straight off the table before moving across it

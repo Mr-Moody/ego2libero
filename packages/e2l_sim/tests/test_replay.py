@@ -15,6 +15,7 @@ from e2l_sim.replay import (
     carry_lift,
     carry_targets,
     hold_at_grip_changes,
+    keepout_yaw,
     libero_state,
     resample_segment,
     snap_grasp,
@@ -154,6 +155,22 @@ def test_warp_carry_moves_the_start_and_keeps_the_set_down():
     out = warp_carry(path, start, n=11, end_xy=[0.02, -0.01])  # centre the set-down
     np.testing.assert_allclose(out[0], start, atol=1e-12)
     np.testing.assert_allclose(out[10:, :3, 3], np.tile([0.02, -0.01, 0.01], (4, 1)), atol=1e-12)
+
+
+def test_warp_carry_turns_the_object_by_end_yaw_at_the_set_down():
+    path = make_T(np.eye(3), np.linspace([0.2, 0.0, 0.01], [0.0, 0.0, 0.01], 11))
+    out = warp_carry(path, path[0], n=11, end_yaw=0.5)
+    np.testing.assert_allclose(out[0], path[0], atol=1e-12)
+    np.testing.assert_allclose(out[-1, :3, :3], rotvec_to_matrix(np.array([0, 0, 0.5])))
+    np.testing.assert_allclose(out[:, :3, 3], path[:, :3, 3], atol=1e-12)
+
+
+def test_keepout_yaw_turns_to_the_nearest_edge():
+    assert keepout_yaw(np.radians(-80), (-95.0, 45.0)) == pytest.approx(np.radians(30))
+    assert keepout_yaw(np.radians(-120), (-95.0, 45.0)) == pytest.approx(np.radians(-20))
+    assert keepout_yaw(np.radians(170), (-170.0, 45.0)) == pytest.approx(np.radians(-25))
+    assert keepout_yaw(np.radians(0), (-95.0, 45.0)) == 0.0
+    assert keepout_yaw(1.0, None) == 0.0
 
 
 def test_hold_at_grip_changes_arrives_open_then_closes():

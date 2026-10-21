@@ -143,6 +143,9 @@ class SimConfig(_Config):
     carry_warp: bool = False  # start the carried object's path where it is (`warp_carry`)
     # sim reference object -> plan-view point (its frame) where warped carries set down
     place_xy: dict[str, tuple[float, float]] = Field(default_factory=dict)
+    # (centre, half width) deg: sim-frame directions from the held object's centre the hand may
+    # not set it down from; warped carries turn the object out of it
+    release_keepout: tuple[float, float] | None = None
 
 
 class GenerateConfig(_Config):
