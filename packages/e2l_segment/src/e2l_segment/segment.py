@@ -27,7 +27,11 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
     object pose is taken from the last valid frame at or before a grasp (the hand may cover the
     tag), the nearest at a release of a static target, and the first at or after a release when
     the reference is the carried object itself. The trailing segment after the last event reuses
-    that event's object and pose."""
+    that event's object and pose.
+
+    A segment that starts at a grasp and references another object (a carry) also stores the
+    carried object's own tracked pose in that frame, `T_obj_held` (see `held_path`): the ArUco
+    track places it far better than the hand-to-object offset does."""
     if not demo.hand_valid.any():
         raise ValueError(f"{demo.demo_id}: hand is never valid")
     grip = aperture_to_grip(demo.t, demo.aperture, cfg)
@@ -68,6 +72,12 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
             T_hand[gap] = interpolate_poses(
                 demo.t[valid], demo.T_table_hand[valid], demo.t[frames[gap]]
             )
+        T_obj_held = None
+        if s > 0 and found[s - 1].kind == "grasp" and refs[s - 1][0] != ref:
+            T_obj_held = held_path(
+                demo, demo.object_names.index(refs[s - 1][0]), frames, cfg.held_upright
+            )
+            T_obj_held = None if T_obj_held is None else T_obj_table @ T_obj_held
         segments.append(
             HandSegment(
                 ref_object=ref,
@@ -75,9 +85,39 @@ def segment_demo(demo: DemoTrajectory, cfg: SegmentConfig) -> HandSegments:
                 t_end=float(demo.t[frames[-1]]),
                 T_obj_hand=T_obj_table @ T_hand,
                 grip=grip[frames],
+                T_obj_held=T_obj_held,
             )
         )
     return HandSegments(demo_id=demo.demo_id, fps=demo.fps, segments=segments)
+
+
+def upright(T: np.ndarray) -> np.ndarray:
+    """Poses (M,4,4) with each rotation replaced by its yaw about z (from the x axis, or the y
+    axis when x points along z)."""
+    R = T[:, :3, :3]
+    yaw = np.where(
+        np.hypot(R[:, 0, 0], R[:, 1, 0]) > 0.1,
+        np.arctan2(R[:, 1, 0], R[:, 0, 0]),
+        np.arctan2(-R[:, 0, 1], R[:, 1, 1]),
+    )
+    out = T.copy()
+    c, s = np.cos(yaw), np.sin(yaw)
+    out[:, :3, :3] = 0.0
+    out[:, 0, 0], out[:, 0, 1], out[:, 1, 0], out[:, 1, 1], out[:, 2, 2] = c, -s, s, c, 1.0
+    return out
+
+
+def held_path(
+    demo: DemoTrajectory, k: int, frames: np.ndarray, keep_upright: bool
+) -> np.ndarray | None:
+    """Table-frame pose (M,4,4) of object `k` over `frames`, from its own tracking: frames where
+    it is unseen are interpolated (held beyond the first and last seen). None when it is seen in
+    fewer than 2 of them. `keep_upright` keeps only the yaw (see `upright`)."""
+    seen = frames[demo.obj_valid[frames, k]]
+    if len(seen) < 2:
+        return None
+    T = interpolate_poses(demo.t[seen], demo.T_table_obj[seen, k], demo.t[frames])
+    return upright(T) if keep_upright else T
 
 
 def largest_gap(demo: DemoTrajectory, segment: HandSegment) -> float:

@@ -96,6 +96,7 @@ class SegmentConfig(_Config):
     anchor_depth: bool = True  # rescale hand depth so the pinch rides the carried object
     depth_window_s: float = 1.0  # running-median window that flags hand depth spikes (s)
     depth_outlier_m: float = 0.05  # free-motion depth this far from that median is a spike
+    held_upright: bool = True  # carried object's tracked pose keeps only its yaw (no tag tilt)
 
 
 class RetargetConfig(_Config):

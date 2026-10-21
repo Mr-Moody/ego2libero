@@ -3,3 +3,4 @@
 close_threshold: 0.035                   # grip closes when aperture drops below this
 open_threshold: 0.055                    # and reopens only above this (hysteresis)
 min_dwell_s: 0.25                        # ignore grip changes shorter than this
+held_upright: true                       # carried object path keeps only its yaw (tag tilt is noise)
