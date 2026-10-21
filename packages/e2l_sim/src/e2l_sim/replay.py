@@ -104,7 +104,8 @@ def snap_grasp(
     The last `descend_steps` targets before the grasp drop straight onto it from `lift` above,
     so the fingers clear the object's wall; the `blend_steps` before those shift the human
     approach towards that pre-grasp pose with a smoothstep weight, so it is kept until the last
-    moment. Later targets hold the grasp."""
+    moment. With a descent, the approach before it is raised to at least the pre-grasp height.
+    Later targets hold the grasp."""
     closed = np.flatnonzero(np.asarray(grip) == GRIPPER_CLOSED)
     if len(closed) == 0 or closed[0] == 0:
         return T_obj_ee
@@ -134,6 +135,8 @@ def snap_grasp(
         w = u * u * (3.0 - 2.0 * u)
         out[i, :3, :3] = rotvec_to_matrix(w * dr) @ T_obj_ee[i, :3, :3]
         out[i, :3, 3] = T_obj_ee[i, :3, 3] + w * dp
+    if d < g:  # the approach stays above the pre-grasp so the fingers clear the object's wall
+        out[:d, 2, 3] = np.maximum(out[:d, 2, 3], T_pre[2, 3])
     return out
 
 

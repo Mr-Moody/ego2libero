@@ -114,7 +114,8 @@ def test_snap_grasp_descends_straight_onto_the_rim_from_above():
     T = make_T(R, np.linspace([0.0, 0.2, 0.03], [0.0, 0.07, 0.03], 30))  # low, from the side
     grip = np.r_[-np.ones(25), np.ones(5)]
     out = snap_grasp(T, grip, 0.05, 0.045, blend_steps=6, lift=0.06, descend_steps=5)
-    np.testing.assert_allclose(out[:14], T[:14])
+    np.testing.assert_allclose(out[:14, :2, 3], T[:14, :2, 3])  # the human path, in plan view
+    np.testing.assert_allclose(out[:20, 2, 3], 0.105)  # but never below the pre-grasp height
     np.testing.assert_allclose(out[20, :3, 3], [0.0, 0.05, 0.105], atol=1e-12)  # pre-grasp
     xy = out[20:26, :3, 3][:, :2]
     np.testing.assert_allclose(xy, np.tile([0.0, 0.05], (6, 1)), atol=1e-12)  # straight down
