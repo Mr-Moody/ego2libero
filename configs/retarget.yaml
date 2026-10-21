@@ -13,6 +13,10 @@ closing_axis: [0.194, 0.116, -0.974]     # hand frame; `e2l retarget calibrate` 
 object_scale:
   bowl: [0.65, 0.65, 0.6]
   plate: [0.65, 0.65, 0.6]
+# Added after scaling (sim metres, object frame). The real bowl and plate are thin (both tags
+# rest within 3 mm of the table); a LIBERO bowl resting on plate_1 sits 1.2 cm above its base.
+object_offset:
+  plate: [0.0, 0.0, 0.012]
 # Feasibility is advisory: `e2l retarget run` reports the fraction of feasible frames; replay
 # does not use it.
 min_height: -0.02                        # m, object frame: grip point not below the table

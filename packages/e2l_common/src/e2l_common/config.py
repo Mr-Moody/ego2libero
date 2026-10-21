@@ -106,6 +106,8 @@ class RetargetConfig(_Config):
     # Per real object: sim size / real size along its frame's x, y, z. Grip-point positions
     # relative to that object are scaled so a grasp on the real rim lands on the sim rim.
     object_scale: dict[str, Vec3] = Field(default_factory=dict)
+    # Per real object: added after scaling (sim metres, its frame), e.g. a thicker sim plate.
+    object_offset: dict[str, Vec3] = Field(default_factory=dict)
     min_height: float = -0.02  # m, grip point above the object's base plane (the table)
     max_object_distance: float = 0.6  # m, grip point to the reference object's origin
     max_linear_speed: float = 1.0  # m/s
