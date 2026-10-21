@@ -144,6 +144,7 @@ class SimConfig(_Config):
     carry_lift: float = 0.0  # m; extra height while carrying, ramped out at the set-down
     carry_ramp_s: float = 0.5
     carry_warp: bool = False  # start the carried object's path where it is (`warp_carry`)
+    carry_regrip: bool = False  # re-measure the grasp at the set-down (corrects slip)
     # sim reference object -> plan-view point (its frame) where warped carries set down
     place_xy: dict[str, tuple[float, float]] = Field(default_factory=dict)
     # (centre, half width) deg: sim-frame directions from the held object's centre the hand may

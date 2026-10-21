@@ -243,7 +243,8 @@ def replay(
     `T_obj_held`, else the hand path through the demo grasp) and the gripper holds it as measured
     in the sim at the segment's start (`carry_targets`). The object is first lifted straight up
     by `cfg.carry_lift` and carried that much higher than the demo until the set-down
-    (`carry_lift`)."""
+    (`carry_lift`). With `cfg.carry_regrip` the grasp is measured again where the set-down
+    starts and the rest of the carry is aimed with it, so a slip in the fingers is corrected."""
     env = make_env(cfg, episode_index=episode_index)
     try:
         obs, _ = env.reset(seed=cfg.seed)
@@ -257,10 +258,10 @@ def replay(
         gripper = GRIPPER_OPEN
         prev: RobotSegment | None = None
         for seg in segments.segments:
-            budget = cfg.max_steps - len(actions)
-            if budget <= 0 or (success and stop_on_success):
+            if cfg.max_steps <= len(actions) or (success and stop_on_success):
                 break
             name = sim_object(seg.ref_object, cfg)
+            regrip = None
             T_obj_ee, grip, T_obj_held = resample_segment(seg, segments.fps, cfg.control_freq)
             poses = object_poses(env)
             if name in cfg.rim_grasp:
@@ -300,9 +301,13 @@ def replay(
                         T_obj_held = warp_carry(
                             T_obj_held, T_obj_held[0], n, T_obj_held[n - 1, :2, 3], yaw
                         )
-                T_obj_ee = carry_targets(T_obj_held, T_held_ee)
                 ramp = round(cfg.carry_ramp_s * cfg.control_freq)
-                T_obj_ee[:n, 2, 3] += carry_lift(n, cfg.carry_lift, ramp)
+                lift = np.zeros(len(grip))
+                lift[:n] = carry_lift(n, cfg.carry_lift, ramp)
+                T_obj_ee = carry_targets(T_obj_held, T_held_ee)
+                T_obj_ee[:, 2, 3] += lift
+                if cfg.carry_regrip:
+                    regrip = max(0, n - ramp)
                 T_up = ee_pose(obs)  # lift straight off the table before moving across it
                 T_up[2, 3] += cfg.carry_lift
                 T_lead = transit(ee_pose(obs), T_up, cfg)
@@ -311,25 +316,39 @@ def replay(
             prev = seg
             T_sim_ee = poses[name] @ T_obj_ee
             T_lead = np.concatenate([T_lead, transit(T_up, T_sim_ee[0], cfg)])
-            targets = np.concatenate([T_lead, T_sim_ee])
-            grips = np.concatenate([np.full(len(T_lead), gripper), grip])
-            targets, grips = hold_at_grip_changes(targets, grips, cfg.gripper_settle_steps)
-            result = track(
-                env,
-                targets,
-                grips,
-                cfg.max_steps_per_target,
-                obs=obs,
-                gain=cfg.tracking_gain,
-                pos_tol=cfg.track_pos_tol,
-                rot_tol=cfg.track_rot_tol,
-                max_steps=budget,
-                stop_on_success=stop_on_success,
-            )
-            observations += result.observations
-            actions += result.actions
-            success |= result.success
-            obs, gripper = result.final_obs, float(grips[-1])
+            k = len(T_sim_ee) if regrip is None else regrip
+            targets = np.concatenate([T_lead, T_sim_ee[:k]])
+            grips = np.concatenate([np.full(len(T_lead), gripper), grip[:k]])
+            for part in range(2):
+                budget = cfg.max_steps - len(actions)
+                if part == 1:
+                    if k >= len(T_sim_ee) or budget <= 0 or (success and stop_on_success):
+                        break
+                    # the object may have slipped in the fingers: re-measure the grasp and aim
+                    # the set-down with it
+                    T_held_ee = inv_T(object_poses(env)[held_name]) @ ee_pose(obs)
+                    T_obj_ee = carry_targets(T_obj_held[k:], T_held_ee)
+                    T_obj_ee[:, 2, 3] += lift[k:]
+                    targets, grips = poses[name] @ T_obj_ee, grip[k:]
+                if len(targets) == 0:
+                    continue
+                targets, grips = hold_at_grip_changes(targets, grips, cfg.gripper_settle_steps)
+                result = track(
+                    env,
+                    targets,
+                    grips,
+                    cfg.max_steps_per_target,
+                    obs=obs,
+                    gain=cfg.tracking_gain,
+                    pos_tol=cfg.track_pos_tol,
+                    rot_tol=cfg.track_rot_tol,
+                    max_steps=budget,
+                    stop_on_success=stop_on_success,
+                )
+                observations += result.observations
+                actions += result.actions
+                success |= result.success
+                obs, gripper = result.final_obs, float(grips[-1])
     finally:
         env.close()
 
