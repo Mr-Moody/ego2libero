@@ -9,6 +9,9 @@ n_episodes: 50                               # per evaluated policy
 seed: 1000                                   # episode i uses seed + i
 output_dir: outputs/eval
 device: cuda
+# Actions executed per policy query (SmolVLA predicts chunks of 50). Replanning every 10 steps
+# lifted Run B from 25/50 to 40/50 on standard (2026-10-24); null keeps the checkpoint's value.
+n_action_steps: 10
 demo_counts: [5, 10, 20, 40]                 # number of human demos in the ablation sweep
 augmentation: [false, true]                  # without / with demo multiplication
 

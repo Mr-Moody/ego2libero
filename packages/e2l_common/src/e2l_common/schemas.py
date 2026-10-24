@@ -126,11 +126,14 @@ class DemoTrajectory(ArrayModel):
     aperture: np.ndarray  # (N,) thumb-tip to index-tip distance, metres
     T_table_obj: np.ndarray  # (N,K,4,4)
     obj_valid: np.ndarray  # (N,K) bool
+    cam_table: np.ndarray | None = None  # (N,3) camera centre in the table frame, NaN if unseen
 
     @model_validator(mode="after")
     def _shapes(self) -> Self:
+        cam = {} if self.cam_table is None else {"cam_table": (self.cam_table, ("N", 3))}
         _check_shapes(
             {
+                **cam,
                 "t": (self.t, ("N",)),
                 "T_table_hand": (self.T_table_hand, ("N", 4, 4)),
                 "hand_valid": (self.hand_valid, ("N",)),
@@ -153,10 +156,14 @@ class HandSegment(ArrayModel):
     t_end: float
     T_obj_hand: np.ndarray  # (M,4,4)
     grip: np.ndarray  # (M,) 0 open, 1 closed
+    T_obj_held: np.ndarray | None = None  # (M,4,4) carried object's tracked pose; carries only
 
     @model_validator(mode="after")
     def _shapes(self) -> Self:
-        _check_shapes({"T_obj_hand": (self.T_obj_hand, ("M", 4, 4)), "grip": (self.grip, ("M",))})
+        held = {} if self.T_obj_held is None else {"T_obj_held": (self.T_obj_held, ("M", 4, 4))}
+        _check_shapes(
+            {**held, "T_obj_hand": (self.T_obj_hand, ("M", 4, 4)), "grip": (self.grip, ("M",))}
+        )
         return self
 
 
@@ -173,11 +180,14 @@ class RobotSegment(ArrayModel):
     T_obj_ee: np.ndarray  # (M,4,4)
     gripper: np.ndarray  # (M,) robosuite convention: -1 open, +1 closed
     feasible: np.ndarray  # (M,) bool
+    T_obj_held: np.ndarray | None = None  # (M,4,4) carried object's demo pose; carries only
 
     @model_validator(mode="after")
     def _shapes(self) -> Self:
+        held = {} if self.T_obj_held is None else {"T_obj_held": (self.T_obj_held, ("M", 4, 4))}
         _check_shapes(
             {
+                **held,
                 "T_obj_ee": (self.T_obj_ee, ("M", 4, 4)),
                 "gripper": (self.gripper, ("M",)),
                 "feasible": (self.feasible, ("M",)),

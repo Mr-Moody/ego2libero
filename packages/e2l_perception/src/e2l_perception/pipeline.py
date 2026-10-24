@@ -12,7 +12,7 @@ from e2l_common.schemas import DemoTrajectory
 from e2l_perception.calibration import load_intrinsics
 from e2l_perception.hand.detector import HandDetection
 from e2l_perception.hand.palm import compute_palm_frame
-from e2l_perception.hand.pose import estimate_T_cam_hand, palm_pose
+from e2l_perception.hand.pose import estimate_T_cam_hand, palm_pose, scale_hand
 from e2l_perception.smoothing import smooth_tracks
 from e2l_perception.video import VideoReader
 
@@ -63,7 +63,7 @@ def observe_frames(
             detection = hand_filter.select(detector.detect_all(frame, t))
             obs = FrameObservation(markers.T_cam_table, markers.T_cam_obj, detection=detection)
             if detection is not None:
-                world = detection.landmarks_3d.astype(np.float64)
+                world = scale_hand(detection.landmarks_3d, cfg.hand_scale)
                 T_world_hand = palm_pose(world)
                 obs.T_cam_hand = estimate_T_cam_hand(
                     world, detection.landmarks_2d, intr.K, intr.dist, T_world_hand
@@ -94,15 +94,17 @@ def assemble_trajectory(
 ) -> DemoTrajectory:
     """Camera-frame observations -> table-frame DemoTrajectory. Hand frames need both the hand
     and the board; interior gaps up to `cfg.max_gap_s` are filled (Kalman+RTS if `cfg.smooth`,
-    else linear interpolation). T_table_hand is the palm frame of the table-frame keypoints.
-    Invalid entries are NaN."""
+    else linear interpolation). T_table_hand is the palm frame of the table-frame keypoints;
+    cam_table is the camera centre wherever the board is seen. Invalid entries are NaN."""
     N, K = len(observations), len(object_names)
     kp = np.full((N, 21, 3), np.nan)
     T_table_obj = np.full((N, K, 4, 4), np.nan)
+    cam_table = np.full((N, 3), np.nan)
     for i, obs in enumerate(observations):
         if obs.T_cam_table is None:
             continue
         T_table_cam = inv_T(obs.T_cam_table)
+        cam_table[i] = T_table_cam[:3, 3]
         if obs.keypoints_cam is not None:
             kp[i] = _transform(T_table_cam, obs.keypoints_cam)
         for k, name in enumerate(object_names):
@@ -134,6 +136,7 @@ def assemble_trajectory(
         aperture=np.linalg.norm(kp[:, THUMB_TIP] - kp[:, INDEX_TIP], axis=1),
         T_table_obj=T_table_obj,
         obj_valid=np.isfinite(T_table_obj).all(axis=(2, 3)),
+        cam_table=cam_table,
     )
 
 

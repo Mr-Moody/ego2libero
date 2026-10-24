@@ -45,6 +45,24 @@ def reference_object(
     return demo.object_names[kept[int(np.argmin(dist))]]
 
 
+def grasped_object(demo: DemoTrajectory, grasp: int, release: int, min_move: float = 0.05) -> str:
+    """Name of the object picked up at frame `grasp` and put down at `release`: the one whose own
+    track moves most between its last pose at or before the grasp and its first at or after the
+    release, if that is at least `min_move` (m). Otherwise, or if no object is seen on both
+    sides, the object nearest the hand at the grasp (`reference_object`)."""
+    best, moved = None, min_move
+    for k, name in enumerate(demo.object_names):
+        valid = demo.obj_valid[:, k]
+        if not valid[: grasp + 1].any() or not valid[release:].any():
+            continue
+        a = nearest_valid_index(valid, grasp, "before")
+        b = nearest_valid_index(valid, release, "after")
+        d = np.linalg.norm(demo.T_table_obj[b, k, :3, 3] - demo.T_table_obj[a, k, :3, 3])
+        if d >= moved:
+            best, moved = name, d
+    return best if best is not None else reference_object(demo, grasp, side="before")
+
+
 def nearest_valid_index(valid: np.ndarray, index: int, side: Side = "nearest") -> int:
     """Index of a valid frame near `index` in a boolean mask (N,).
 

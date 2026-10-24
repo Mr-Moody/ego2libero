@@ -3,14 +3,21 @@
 import numpy as np
 
 from e2l_common.config import SimConfig
-from e2l_common.geometry import interpolate_poses
+from e2l_common.geometry import (
+    interpolate_poses,
+    inv_T,
+    make_T,
+    matrix_to_rotvec,
+    rotvec_to_matrix,
+)
 from e2l_common.schemas import RobotSegment, RobotSegments, SimEpisode
-from e2l_sim.control import GRIPPER_OPEN, ee_pose, pose_error, track
+from e2l_sim.control import GRIPPER_CLOSED, GRIPPER_OPEN, ee_pose, pose_error, track
 from e2l_sim.env import make_env
 from e2l_sim.scene import object_poses, set_object_poses
 
 SETTLE_STEPS = 10  # no-op steps after teleporting objects, as LiberoEnv does after reset
 TRANSIT_ROT_SPEED = 1.5  # rad/s
+REGRIP_MAX_SLIP = 0.02  # m; a larger change of grasp before the set-down is a drop
 
 
 def libero_state(obs: dict) -> np.ndarray:
@@ -27,12 +34,16 @@ def libero_state(obs: dict) -> np.ndarray:
 
 
 def resample_segment(seg: RobotSegment, fps: float, control_freq: float):
-    """T_obj_ee (M,4,4) and gripper (M,) at the demo fps -> the control rate."""
+    """T_obj_ee (M,4,4), gripper (M,) and T_obj_held (M,4,4, or None) at the demo fps -> the
+    control rate."""
     t = np.arange(len(seg.T_obj_ee)) / fps
     t_query = np.arange(0.0, t[-1] + 1e-9, 1.0 / control_freq)
+    if t[-1] - t_query[-1] > 1e-9:  # end on the last frame: it is often the grasp or release
+        t_query = np.append(t_query, t[-1])
     T = interpolate_poses(t, seg.T_obj_ee, t_query)
+    held = None if seg.T_obj_held is None else interpolate_poses(t, seg.T_obj_held, t_query)
     idx = np.minimum(np.round(t_query * fps).astype(int), len(seg.gripper) - 1)
-    return T, np.asarray(seg.gripper, dtype=np.float64)[idx]
+    return T, np.asarray(seg.gripper, dtype=np.float64)[idx], held
 
 
 def transit(T_from: np.ndarray, T_to: np.ndarray, cfg: SimConfig) -> np.ndarray:
@@ -47,12 +58,167 @@ def transit(T_from: np.ndarray, T_to: np.ndarray, cfg: SimConfig) -> np.ndarray:
 
 
 def hold_at_grip_changes(T: np.ndarray, grip: np.ndarray, steps: int):
-    """Repeat the target `steps` extra times wherever the gripper command flips, so the
-    fingers finish closing (or opening) before the arm moves on."""
+    """Wherever the gripper command flips, hold the event's target `steps` times with the old
+    command so the arm arrives first, then `steps` more with the new one so the fingers finish
+    closing (or opening) before the arm moves on."""
     flips = np.flatnonzero(np.diff(np.sign(grip)) != 0) + 1
     reps = np.ones(len(T), dtype=int)
     reps[flips] += steps
-    return np.repeat(T, reps, axis=0), np.repeat(grip, reps)
+    T_out, g_out = np.repeat(T, reps, axis=0), np.repeat(grip, reps)
+    starts = np.cumsum(reps) - reps  # index of each input frame in the output
+    arrive = np.repeat(starts[flips], steps)
+    return (
+        np.insert(T_out, arrive, T_out[arrive], axis=0),
+        np.insert(g_out, arrive, g_out[arrive - 1]),
+    )
+
+
+def trim_approach(
+    T_obj_ee: np.ndarray, grip: np.ndarray, radius: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Drop a grasp segment's targets before its approach last enters `radius` of the grasp
+    (its first closed target): far from the object the hand track is noisiest, and the transit
+    into the segment covers that stretch in a straight line. Segments without a grasp, or
+    starting closed, are returned unchanged."""
+    closed = np.flatnonzero(np.asarray(grip) == GRIPPER_CLOSED)
+    if len(closed) == 0 or closed[0] == 0:
+        return T_obj_ee, grip
+    g = closed[0]
+    far = np.linalg.norm(T_obj_ee[:g, :3, 3] - T_obj_ee[g, :3, 3], axis=1) > radius
+    start = int(np.flatnonzero(far)[-1]) + 1 if far.any() else 0
+    return T_obj_ee[start:], grip[start:]
+
+
+def snap_grasp(
+    T_obj_ee: np.ndarray,
+    grip: np.ndarray,
+    radius: float,
+    height: float,
+    blend_steps: int,
+    lift: float = 0.0,
+    descend_steps: int = 0,
+    x_pref: np.ndarray | None = None,
+    keepout: tuple[float, float] | None = None,
+) -> np.ndarray:
+    """Move a segment's grasp (its first closed target, if it starts open) onto the object's rim:
+    the circle of `radius` at `height` in the object frame, at the human grasp's angle around
+    it (turned out of `keepout`, an object-frame sector as in `keepout_yaw`), top-down with the
+    fingers closing radially. Of the two half turns that grip the same way, take the one whose
+    x axis is nearest `x_pref` (object frame; e.g. the gripper's current x, so the wrist turns
+    least), else nearest the human yaw.
+
+    The last `descend_steps` targets before the grasp drop straight onto it from `lift` above,
+    so the fingers clear the object's wall; the `blend_steps` before those shift the human
+    approach towards that pre-grasp pose with a smoothstep weight, so it is kept until the last
+    moment. With a descent, the approach before it is raised to at least the pre-grasp height.
+    Later targets hold the grasp."""
+    closed = np.flatnonzero(np.asarray(grip) == GRIPPER_CLOSED)
+    if len(closed) == 0 or closed[0] == 0:
+        return T_obj_ee
+    g = closed[0]
+    p, x = T_obj_ee[g, :3, 3], T_obj_ee[g, :3, 0]
+    angle = np.arctan2(p[1], p[0])
+    angle += keepout_yaw(angle, keepout)
+    rim = np.array([np.cos(angle), np.sin(angle), 0.0])
+    radial = rim if rim @ (x if x_pref is None else x_pref) >= 0 else -rim
+    down = np.array([0.0, 0.0, -1.0])
+    T_grasp = make_T(
+        np.column_stack([radial, np.cross(down, radial), down]),
+        radius * rim + [0.0, 0.0, height],
+    )
+    out = T_obj_ee.copy()
+    out[g:] = T_grasp
+    d = max(0, g - descend_steps)
+    T_pre = T_grasp.copy()
+    if d < g:
+        T_pre[2, 3] += lift
+        for i in range(d, g):
+            out[i] = T_grasp
+            out[i, :3, 3] = T_pre[:3, 3] + (i - d) / (g - d) * (T_grasp[:3, 3] - T_pre[:3, 3])
+    dp = T_pre[:3, 3] - T_obj_ee[d, :3, 3]
+    dr = matrix_to_rotvec(T_pre[:3, :3] @ T_obj_ee[d, :3, :3].T)
+    for i in range(max(0, d - blend_steps), d):
+        u = (i - (d - blend_steps)) / blend_steps
+        w = u * u * (3.0 - 2.0 * u)
+        out[i, :3, :3] = rotvec_to_matrix(w * dr) @ T_obj_ee[i, :3, :3]
+        out[i, :3, 3] = T_obj_ee[i, :3, 3] + w * dp
+    if d < g:  # the approach stays above the pre-grasp so the fingers clear the object's wall
+        out[:d, 2, 3] = np.maximum(out[:d, 2, 3], T_pre[2, 3])
+    return out
+
+
+def object_sector(
+    keepout: tuple[float, float] | None, T_sim_obj: np.ndarray
+) -> tuple[float, float] | None:
+    """A sim-frame (centre, half width) sector in degrees, in an object's frame (its yaw)."""
+    if keepout is None:
+        return None
+    yaw = np.degrees(np.arctan2(T_sim_obj[1, 0], T_sim_obj[0, 0]))
+    return (keepout[0] - yaw, keepout[1])
+
+
+def carry_lift(n: int, lift: float, ramp_steps: int) -> np.ndarray:
+    """(n,) heights added to a carry that ends in its set-down at index n - 1: `lift` until the
+    last `ramp_steps` targets, then a linear ramp to zero, so the carried object clears the
+    reference object's rim but is set down where the demo set it."""
+    return lift * np.clip((n - 1 - np.arange(n)) / max(1, ramp_steps), 0.0, 1.0)
+
+
+def warp_carry(
+    T_ref_held: np.ndarray,
+    T_ref_start: np.ndarray,
+    n: int,
+    end_xy: np.ndarray | None = None,
+    end_yaw: float = 0.0,
+    keep_turn: bool = False,
+) -> np.ndarray:
+    """Shift a held object's demo path (M,4,4) so it starts at T_ref_start, the object's actual
+    pose, instead of where the demo's object started relative to the reference. The shift fades
+    with a smoothstep in the distance travelled and is gone at index n - 1 (the set-down), so the
+    path keeps the human's shape but needs no detour to its demo start. With `end_xy`, a second
+    shift fades in the other way so the set-down lands at that point in plan view (LIBERO's `On`
+    wants the object within 3 cm of the reference's centre), and `end_yaw` (rad) turns the object
+    about its vertical axis the same way; later targets get all of both. With `keep_turn` the
+    start's rotation offset is kept throughout instead of fading: for a round object, whose demo
+    yaw (where its tag was) means nothing, the path keeps only the human's turns."""
+    out = T_ref_held.copy()
+    n = min(n, len(out))
+    if n < 2:
+        return out
+    dp = T_ref_start[:3, 3] - T_ref_held[0, :3, 3]
+    dr = matrix_to_rotvec(T_ref_start[:3, :3] @ T_ref_held[0, :3, :3].T)
+    de = np.zeros(3)
+    if end_xy is not None:
+        de[:2] = np.asarray(end_xy) - T_ref_held[n - 1, :2, 3]
+    s = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(T_ref_held[:n, :3, 3], axis=0), axis=1))]
+    u = s / s[-1] if s[-1] > 1e-9 else np.arange(n) / (n - 1)
+    w = u * u * (3.0 - 2.0 * u)
+    w = np.r_[w, np.ones(len(out) - n)]
+    for i in range(len(out)):
+        turn = 1.0 if keep_turn else 1.0 - w[i]
+        R = rotvec_to_matrix([0.0, 0.0, w[i] * end_yaw]) @ rotvec_to_matrix(turn * dr)
+        out[i, :3, :3] = R @ T_ref_held[i, :3, :3]
+        out[i, :3, 3] = T_ref_held[i, :3, 3] + (1.0 - w[i]) * dp + w[i] * de
+    return out
+
+
+def keepout_yaw(direction: float, keepout: tuple[float, float] | None) -> float:
+    """Yaw (rad) that turns a plan-view `direction` (rad) out of `keepout`, a sector given as
+    (centre, half width) in degrees, to its nearest edge; 0 if it is outside or no sector."""
+    if keepout is None:
+        return 0.0
+    centre, half = np.radians(keepout[0]), np.radians(keepout[1])
+    off = (direction - centre + np.pi) % (2 * np.pi) - np.pi
+    if abs(off) >= half:
+        return 0.0
+    return (half if off >= 0 else -half) - off
+
+
+def carry_targets(T_ref_held: np.ndarray, T_held_ee: np.ndarray) -> np.ndarray:
+    """End-effector targets (M,4,4) that move the held object along its demo path relative to the
+    reference object, T_ref_held (M,4,4), while holding it as the robot actually does now,
+    T_held_ee (4,4)."""
+    return T_ref_held @ T_held_ee
 
 
 def sim_object(name: str, cfg: SimConfig) -> str:
@@ -73,7 +239,13 @@ def replay(
     Nominal poses come from the LIBERO init state `episode_index`; `T_sim_obj` (LIBERO object
     name -> (4,4)) overrides some or all of them. Each segment is anchored to its reference
     object's pose at the moment the segment starts, as in MimicGen, and is reached from the
-    current grip-site pose by a straight `transit`."""
+    current grip-site pose by a straight `transit`. A segment that starts with the gripper
+    closed carries the previous segment's object: the object follows its demo path (its own track,
+    `T_obj_held`, else the hand path through the demo grasp) and the gripper holds it as measured
+    in the sim at the segment's start (`carry_targets`). The object is first lifted straight up
+    by `cfg.carry_lift` and carried that much higher than the demo until the set-down
+    (`carry_lift`). With `cfg.carry_regrip` the grasp is measured again where the set-down
+    starts and the rest of the carry is aimed with it, so a slip in the fingers is corrected."""
     env = make_env(cfg, episode_index=episode_index)
     try:
         obs, _ = env.reset(seed=cfg.seed)
@@ -85,31 +257,101 @@ def replay(
 
         observations, actions, success = [], [], False
         gripper = GRIPPER_OPEN
+        prev: RobotSegment | None = None
         for seg in segments.segments:
-            budget = cfg.max_steps - len(actions)
-            if budget <= 0 or (success and stop_on_success):
+            if cfg.max_steps <= len(actions) or (success and stop_on_success):
                 break
             name = sim_object(seg.ref_object, cfg)
-            T_obj_ee, grip = resample_segment(seg, segments.fps, cfg.control_freq)
-            T_sim_ee = object_poses(env)[name] @ T_obj_ee
-            T_lead = transit(ee_pose(obs), T_sim_ee[0], cfg)
-            targets = np.concatenate([T_lead, T_sim_ee])
-            grips = np.concatenate([np.full(len(T_lead), gripper), grip])
-            targets, grips = hold_at_grip_changes(targets, grips, cfg.gripper_settle_steps)
-            result = track(
-                env,
-                targets,
-                grips,
-                cfg.max_steps_per_target,
-                obs=obs,
-                gain=cfg.tracking_gain,
-                max_steps=budget,
-                stop_on_success=stop_on_success,
-            )
-            observations += result.observations
-            actions += result.actions
-            success |= result.success
-            obs, gripper = result.final_obs, float(grips[-1])
+            regrip = None
+            T_obj_ee, grip, T_obj_held = resample_segment(seg, segments.fps, cfg.control_freq)
+            poses = object_poses(env)
+            if name in cfg.rim_grasp:
+                if cfg.approach_radius is not None:
+                    T_obj_ee, grip = trim_approach(T_obj_ee, grip, cfg.approach_radius)
+                T_obj_ee = snap_grasp(
+                    T_obj_ee,
+                    grip,
+                    *cfg.rim_grasp[name],
+                    blend_steps=max(1, round(cfg.grasp_blend_s * cfg.control_freq)),
+                    lift=cfg.grasp_lift,
+                    descend_steps=round(cfg.grasp_descend_s * cfg.control_freq),
+                    x_pref=(inv_T(poses[name]) @ ee_pose(obs))[:3, 0],
+                    keepout=object_sector(cfg.grasp_keepout, poses[name]),
+                )
+            if (
+                prev is not None
+                and seg.gripper[0] == GRIPPER_CLOSED
+                and prev.ref_object != seg.ref_object
+            ):
+                held_name = sim_object(prev.ref_object, cfg)
+                held = poses[held_name]
+                if T_obj_held is None:  # no object track: the hand path and the demo grasp
+                    T_obj_held = T_obj_ee @ inv_T(prev.T_obj_ee[-1])
+                opened = np.flatnonzero(grip == GRIPPER_OPEN)
+                n = int(opened[0]) + 1 if len(opened) else len(grip)
+                T_held_ee = inv_T(held) @ ee_pose(obs)
+                if cfg.carry_warp:
+                    end_xy = cfg.place_xy.get(name)
+                    round_ = held_name in cfg.rim_grasp  # rim-grasped objects are round
+                    T_obj_held = warp_carry(
+                        T_obj_held, inv_T(poses[name]) @ held, n, end_xy, keep_turn=round_
+                    )
+                    hand = (poses[name] @ T_obj_held[n - 1])[:3, :3] @ T_held_ee[:3, 3]
+                    yaw = keepout_yaw(np.arctan2(hand[1], hand[0]), cfg.release_keepout)
+                    if yaw:  # turn the (symmetric) object so the hand sets it down clear
+                        T_obj_held = warp_carry(
+                            T_obj_held, T_obj_held[0], n, T_obj_held[n - 1, :2, 3], yaw
+                        )
+                ramp = round(cfg.carry_ramp_s * cfg.control_freq)
+                lift = np.zeros(len(grip))
+                lift[:n] = carry_lift(n, cfg.carry_lift, ramp)
+                T_obj_ee = carry_targets(T_obj_held, T_held_ee)
+                T_obj_ee[:, 2, 3] += lift
+                if cfg.carry_regrip:
+                    regrip = max(0, n - ramp)
+                T_up = ee_pose(obs)  # lift straight off the table before moving across it
+                T_up[2, 3] += cfg.carry_lift
+                T_lead = transit(ee_pose(obs), T_up, cfg)
+            else:
+                T_up, T_lead = ee_pose(obs), np.empty((0, 4, 4))
+            prev = seg
+            T_sim_ee = poses[name] @ T_obj_ee
+            T_lead = np.concatenate([T_lead, transit(T_up, T_sim_ee[0], cfg)])
+            k = len(T_sim_ee) if regrip is None else regrip
+            targets = np.concatenate([T_lead, T_sim_ee[:k]])
+            grips = np.concatenate([np.full(len(T_lead), gripper), grip[:k]])
+            for part in range(2):
+                budget = cfg.max_steps - len(actions)
+                if part == 1:
+                    if k >= len(T_sim_ee) or budget <= 0 or (success and stop_on_success):
+                        break
+                    # the object may have slipped in the fingers: re-measure the grasp and aim
+                    # the set-down with it (unless it moved so far that it was dropped)
+                    T_now = inv_T(object_poses(env)[held_name]) @ ee_pose(obs)
+                    if pose_error(T_now, T_held_ee)[0] < REGRIP_MAX_SLIP:
+                        T_held_ee = T_now
+                    T_obj_ee = carry_targets(T_obj_held[k:], T_held_ee)
+                    T_obj_ee[:, 2, 3] += lift[k:]
+                    targets, grips = poses[name] @ T_obj_ee, grip[k:]
+                if len(targets) == 0:
+                    continue
+                targets, grips = hold_at_grip_changes(targets, grips, cfg.gripper_settle_steps)
+                result = track(
+                    env,
+                    targets,
+                    grips,
+                    cfg.max_steps_per_target,
+                    obs=obs,
+                    gain=cfg.tracking_gain,
+                    pos_tol=cfg.track_pos_tol,
+                    rot_tol=cfg.track_rot_tol,
+                    max_steps=budget,
+                    stop_on_success=stop_on_success,
+                )
+                observations += result.observations
+                actions += result.actions
+                success |= result.success
+                obs, gripper = result.final_obs, float(grips[-1])
     finally:
         env.close()
 

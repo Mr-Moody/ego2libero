@@ -2,8 +2,9 @@ import numpy as np
 import pytest
 
 from e2l_common.config import SegmentConfig
+from e2l_common.geometry import rotvec_to_matrix
 from e2l_common.schemas import DemoTrajectory
-from e2l_segment.assign import nearest_valid_index, reference_object
+from e2l_segment.assign import grasped_object, nearest_valid_index, reference_object
 from e2l_segment.segment import largest_gap, segment_demo
 
 FPS = 30.0
@@ -190,3 +191,35 @@ def test_object_tilt_deg_reports_median_angle_to_table_normal():
     assert tilt["plate"] == pytest.approx(90.0)
     demo.obj_valid[:, 1] = False
     assert "plate" not in object_tilt_deg(demo)
+
+
+def test_carry_records_the_held_object_path_relative_to_the_reference():
+    demo = _demo()
+    demo.obj_valid[40:45, 0] = False  # bowl tag hidden mid-carry
+    demo.T_table_obj[40:45, 0] = np.nan
+    s0, s1, s2 = segment_demo(demo, SegmentConfig()).segments
+    assert s0.T_obj_held is None and s2.T_obj_held is None
+    expected = _demo().T_table_obj[30:61, 0, :3, 3] - PLATE
+    np.testing.assert_allclose(s1.T_obj_held[:, :3, 3], expected, atol=1e-9)
+
+
+def test_held_object_path_is_made_upright_keeping_its_yaw():
+    demo = _demo()
+    yaw, tilt = rotvec_to_matrix(np.array([0, 0, 0.5])), rotvec_to_matrix(np.array([0.3, 0, 0]))
+    demo.T_table_obj[30:61, 0, :3, :3] = yaw @ tilt
+    s1 = segment_demo(demo, SegmentConfig()).segments[1]
+    np.testing.assert_allclose(s1.T_obj_held[:, :3, :3], np.broadcast_to(yaw, (31, 3, 3)))
+    s1 = segment_demo(demo, SegmentConfig(held_upright=False)).segments[1]
+    np.testing.assert_allclose(s1.T_obj_held[:, :3, :3], np.broadcast_to(yaw @ tilt, (31, 3, 3)))
+
+
+def test_grasped_object_is_the_one_that_moves_while_held():
+    demo = _demo()
+    demo.keypoints_table[30, [4, 8]] = PLATE  # hand depth error: the pinch looks nearest the plate
+    assert reference_object(demo, 30, side="before") == "plate"
+    assert grasped_object(demo, 30, 60) == "bowl"
+    segs = segment_demo(demo, SegmentConfig())
+    assert segs.segments[0].ref_object == "bowl"
+    static = _demo()
+    static.T_table_obj[:, 0, :3, 3] = BOWL  # nothing moves: nearest object at the grasp
+    assert grasped_object(static, 30, 60) == "bowl"

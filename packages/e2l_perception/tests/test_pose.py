@@ -2,7 +2,12 @@ import cv2
 import numpy as np
 
 from e2l_common.geometry import make_T, rotvec_to_matrix
-from e2l_perception.hand.pose import estimate_T_cam_hand, estimate_T_cam_world, palm_pose
+from e2l_perception.hand.pose import (
+    estimate_T_cam_hand,
+    estimate_T_cam_world,
+    palm_pose,
+    scale_hand,
+)
 
 K = np.array([[900.0, 0.0, 640.0], [0.0, 900.0, 360.0], [0.0, 0.0, 1.0]])
 DIST = np.zeros(5)
@@ -43,3 +48,14 @@ def test_non_finite_input_returns_none(hand_pts):
     px[3] = np.nan
     assert estimate_T_cam_world(hand_pts, px, K, DIST) is None
     assert estimate_T_cam_hand(hand_pts, px, K, DIST, palm_pose(hand_pts)) is None
+
+
+def test_hand_scale_corrects_depth_of_a_smaller_hand(hand_pts):
+    # A real hand 0.85x MediaPipe's model: PnP on the unscaled model overestimates depth by
+    # 1/0.85; scaling the world landmarks first recovers the true pose.
+    real = 0.85 * hand_pts
+    px = _project(T_CAM_WORLD, real)
+    naive = estimate_T_cam_world(hand_pts, px, K, DIST)
+    np.testing.assert_allclose(naive[:3, 3], T_CAM_WORLD[:3, 3] / 0.85, atol=1e-4)
+    world = scale_hand(hand_pts, 0.85)
+    np.testing.assert_allclose(estimate_T_cam_world(world, px, K, DIST), T_CAM_WORLD, atol=1e-5)

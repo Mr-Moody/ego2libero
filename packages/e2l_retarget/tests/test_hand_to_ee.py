@@ -125,3 +125,58 @@ def test_retarget_keeps_gripper_yaw_continuous_across_segment_boundary():
     x_last = R_obj @ robot.segments[0].T_obj_ee[-1, :3, 0]
     x_first = R_obj @ robot.segments[1].T_obj_ee[0, :3, 0]
     assert x_last @ x_first > 0.9
+
+
+def test_retarget_scales_positions_by_the_reference_object_size():
+    T_obj_hand = np.stack(
+        [make_T(R_HAND, np.array([0.08, 0.02, 0.06 + 0.01 * i])) for i in range(4)]
+    )
+    seg = HandSegment(
+        ref_object="bowl", t_start=0.0, t_end=0.1, T_obj_hand=T_obj_hand, grip=np.zeros(4, np.int8)
+    )
+    hand = HandSegments(demo_id="20261008_test_000", fps=30.0, segments=[seg])
+    base = RetargetConfig(T_hand_ee=Pose(xyz=(0.0, 0.0, 0.0)))
+    scaled = base.model_copy(update={"object_scale": {"bowl": (0.7, 0.7, 0.5)}})
+    T0 = retarget_segments(hand, base).segments[0].T_obj_ee
+    T1 = retarget_segments(hand, scaled).segments[0].T_obj_ee
+    np.testing.assert_allclose(T1[:, :3, 3], T0[:, :3, 3] * [0.7, 0.7, 0.5])
+    np.testing.assert_allclose(T1[:, :3, :3], T0[:, :3, :3])
+    other = base.model_copy(update={"object_scale": {"plate": (0.5, 0.5, 0.5)}})
+    np.testing.assert_allclose(retarget_segments(hand, other).segments[0].T_obj_ee, T0)
+
+
+def test_retarget_scales_the_held_object_path_like_the_grip_point():
+    T_held = np.stack([make_T(np.eye(3), np.array([0.1, 0.0, 0.05 * i])) for i in range(3)])
+    seg = HandSegment(
+        ref_object="plate",
+        t_start=0.0,
+        t_end=0.1,
+        T_obj_hand=np.stack([make_T(R_HAND, np.zeros(3))] * 3),
+        grip=np.ones(3, np.int8),
+        T_obj_held=T_held,
+    )
+    hand = HandSegments(demo_id="20261008_test_000", fps=30.0, segments=[seg])
+    cfg = RetargetConfig(object_scale={"plate": (0.5, 0.5, 0.6)})
+    out = retarget_segments(hand, cfg).segments[0].T_obj_held
+    np.testing.assert_allclose(out[:, :3, 3], T_held[:, :3, 3] * [0.5, 0.5, 0.6])
+    seg.T_obj_held = None
+    assert retarget_segments(hand, cfg).segments[0].T_obj_held is None
+
+
+def test_retarget_offsets_positions_after_scaling():
+    T_held = np.stack([make_T(np.eye(3), np.array([0.1, 0.0, 0.05 * i])) for i in range(3)])
+    seg = HandSegment(
+        ref_object="plate",
+        t_start=0.0,
+        t_end=0.1,
+        T_obj_hand=np.stack([make_T(R_HAND, np.zeros(3))] * 3),
+        grip=np.ones(3, np.int8),
+        T_obj_held=T_held,
+    )
+    hand = HandSegments(demo_id="20261008_test_000", fps=30.0, segments=[seg])
+    cfg = RetargetConfig(object_scale={"plate": (0.5, 0.5, 0.5)})
+    base = retarget_segments(hand, cfg).segments[0]
+    cfg.object_offset = {"plate": (0.0, 0.0, 0.012)}
+    out = retarget_segments(hand, cfg).segments[0]
+    np.testing.assert_allclose(out.T_obj_ee[:, :3, 3], base.T_obj_ee[:, :3, 3] + [0, 0, 0.012])
+    np.testing.assert_allclose(out.T_obj_held[:, :3, 3], base.T_obj_held[:, :3, 3] + [0, 0, 0.012])
