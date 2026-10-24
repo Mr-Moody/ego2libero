@@ -106,6 +106,8 @@ def rollout(
     policy_cfg = PreTrainedConfig.from_pretrained(policy_path)
     policy_cfg.pretrained_path = policy_path
     policy_cfg.device = cfg.device
+    if cfg.n_action_steps is not None:
+        policy_cfg.n_action_steps = cfg.n_action_steps
 
     if setting == "wide":
         from e2l_sim.env import make_env as make_sim_env

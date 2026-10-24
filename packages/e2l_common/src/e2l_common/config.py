@@ -208,6 +208,7 @@ class EvalConfig(_Config):
     seed: int = 1000
     output_dir: Path = Path("outputs/eval")
     device: str = "cuda"
+    n_action_steps: int | None = None  # actions run per policy query; None keeps the checkpoint's
     wide: WidePoseConfig = Field(default_factory=WidePoseConfig)
     demo_counts: list[int] = Field(default_factory=lambda: [5, 10, 20, 40])
     augmentation: list[bool] = Field(default_factory=lambda: [False, True])
