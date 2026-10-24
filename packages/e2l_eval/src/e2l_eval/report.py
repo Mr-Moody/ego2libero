@@ -168,7 +168,8 @@ def rollout_grid(
         for k, ((label, _), clip) in enumerate(zip(tiles, clips, strict=True)):
             canvas.paste(Image.fromarray(clip[min(t, len(clip) - 1)]), (k * tile, strip))
             draw.text((k * tile + 4, 2), label, fill="black")
-        frames.append(canvas)
+        # PIL's default dithered quantize roughly triples the file size of these renders
+        frames.append(canvas.quantize(colors=128, dither=Image.Dither.NONE))
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=1000 // fps, loop=0)
     return path
 
