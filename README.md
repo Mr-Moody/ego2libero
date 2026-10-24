@@ -13,12 +13,18 @@ of my own hand moving a tagged bowl onto a tagged plate. 38 of the demos replay 
 simulation; generation turns them into 2,711 successful episodes (71% of 3,800 attempts).
 
 Fine-tuning SmolVLA on the 38 replayed demos alone (Run A) gives 26% on LIBERO's standard
-initial states; adding the generated episodes (Run B) doubles that to 50%, and to **80%** when
-the policy replans every 10 steps instead of running each 50-step action chunk open loop.
+initial states; adding the generated episodes (Run B) doubles that to 50%, and to 68–84% when
+the policy replans every 5–10 steps instead of running each 50-step action chunk open loop.
+Replanning also lifts Run B to 20% in the wide setting, where the objects start further away
+than any generated episode put them.
 
 ![Success rates](docs/figures/success_rates.png)
 
-![Rollouts](docs/figures/rollouts.gif)
+![Run B successes from six wide-setting starts](docs/figures/rollouts.gif)
+
+*Run B (replanning every 10 steps) succeeding from six wide-setting starts, picked to be as far
+apart as possible: the bowl and plate are moved 8–15 cm and turned 0.5–1.0 rad from LIBERO's
+initial layout, so every approach is to a pose the policy never trained on. Shown at 4x speed.*
 
 ## Setup
 
@@ -54,11 +60,13 @@ for 20k steps at batch 32 and run each 50-step action chunk open loop, except wh
 | A, 10k steps | same, ~41 epochs | 15/50 = 30% [19–44%] | 0/50 = 0% [0–7%] |
 | B | + 2,711 generated episodes (571k frames, ~1.1 epochs) | 25/50 = 50% [37–63%] | 3/50 = 6% [2–16%] |
 | B, replan every 25 steps | same checkpoint | 31/50 = 62% | |
-| B, replan every 10 steps | same checkpoint | **40/50 = 80%** | |
+| B, replan every 10 steps | same checkpoint | 40/50 = 80%; rerun 34/50 = 68% | **10/50 = 20%** [11–33%] |
+| B, replan every 5 steps | same checkpoint | **42/50 = 84%** [71–92%] | |
 | reference | `HuggingFaceVLA/smolvla_libero` (LIBERO teleop, replans every step) | 47/50 = 94% [84–98%] | 0/50 = 0% [0–7%] |
 
 Run B's intermediate checkpoints score 32% (5k), 48% (10k) and 52% (15k) on standard, so it
-had not plateaued. The reference was trained on teleoperated demos of exactly this scene, so it
+had not plateaued. The two replan-every-10 runs use the same seeds; their 12-point gap is
+the run-to-run noise of 50 episodes, so differences under ~15 points are not meaningful. The reference was trained on teleoperated demos of exactly this scene, so it
 is an upper bound for the standard setting, not a baseline; it collapses in the wide setting.
 
 Each policy is evaluated on LIBERO's standard initial states and on a **wide-pose** setting
@@ -74,7 +82,7 @@ TODO
 ## What worked and what didn't
 
 - **Generated episodes matter more than training longer.** Run A sees its 38 demos ~83 times
-  and plateaus near 30%; Run B sees each episode about once and reaches 50% (80% replanning).
+  and plateaus near 30%; Run B sees each episode about once and reaches 50% (68–84% replanning).
 - **Replanning more often is the cheapest win.** `smolvla_base` executes all 50 predicted
   actions before looking again; a grasp that starts slightly off is never corrected.
   `configs/eval.yaml: n_action_steps` overrides this at evaluation time.
