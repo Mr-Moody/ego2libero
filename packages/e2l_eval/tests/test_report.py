@@ -60,14 +60,45 @@ def test_table_orders_runs_and_marks_missing_cells(tmp_path):
     assert "1 of 2 wide episodes" in table  # placements recorded for 2 episodes
 
 
-def test_grid_finds_videos_next_to_results_and_skips_missing_tiles(tmp_path):
-    _write(tmp_path, "B", "standard", [True, True], videos=2)  # no failure video
+def _placed(seed: int, x: float) -> dict:
+    pose = {"xyz": [x, 0.0, 0.9], "rotvec": [0.0, 0.0, 0.0]}
+    return {"seed": seed, "placement_failed": False, "T_sim_obj": {"bowl": pose, "plate": pose}}
+
+
+def test_grid_shows_successes_only_and_finds_videos_next_to_results(tmp_path):
+    _write(tmp_path, "B", "standard", [True, False], videos=2)
     _write(tmp_path, "B", "wide", [False], videos=1)
     out = rollout_grid(load_results(tmp_path), tmp_path / "grid.gif", tile=64)
     assert out == tmp_path / "grid.gif"
     gif = Image.open(out)
-    assert gif.size == (2 * 64, 64 + 16)  # two tiles (success, wide) plus label strip
+    assert gif.size == (64, 64 + 16)  # the one success, plus its label strip
     assert gif.n_frames >= 2
+
+
+def test_tiles_spread_wide_successes_before_standard_ones(tmp_path):
+    from e2l_eval.report import _tiles
+
+    xs = [0.0, 0.01, 0.3, 0.15]  # starts 0 and 0.01 are near duplicates
+    _write(
+        tmp_path,
+        "B",
+        "wide",
+        [True] * 4,
+        videos=4,
+        placements=[_placed(s, x) for s, x in enumerate(xs)],
+    )
+    _write(tmp_path, "B", "standard", [True], videos=1)
+    for name in ("B/wide/results.json", "B/standard/results.json"):
+        path = tmp_path / name
+        path.write_text(json.dumps(json.loads(path.read_text()) | {"seeds": list(range(4))}))
+    labels = [label for label, _ in _tiles(load_results(tmp_path), max_tiles=5)]
+    assert labels == [
+        "B: wide (seed 0)",
+        "B: wide (seed 2)",
+        "B: wide (seed 3)",
+        "B: wide (seed 1)",  # the near duplicate comes last among the wide ones
+        "B: standard (seed 0)",
+    ]
 
 
 def test_make_report_without_videos_writes_table_and_chart_only(tmp_path):

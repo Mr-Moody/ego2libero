@@ -107,29 +107,40 @@ def _video(row: dict, index: int) -> Path | None:
     return None
 
 
-def _tiles(rows: list[dict]) -> list[tuple[str, Path]]:
-    """(label, video) for the headline run: first standard success, first standard failure,
-    first wide video."""
+def _start_xy(placement: dict | None) -> np.ndarray | None:
+    """Where a wide episode put its task objects: their xy, in name order (None if unmoved)."""
+    if not placement or placement.get("placement_failed"):
+        return None
+    poses = placement["T_sim_obj"]
+    return np.concatenate([poses[name]["xyz"][:2] for name in sorted(poses)])
+
+
+def _tiles(rows: list[dict], max_tiles: int = 6) -> list[tuple[str, Path]]:
+    """(label, video) of successful headline-run episodes. Wide successes come first, picked
+    farthest-first by where the task objects started so the grid shows a spread of starts;
+    standard successes fill the rest."""
     runs = _runs(rows)
     run = HEADLINE if HEADLINE in runs else (runs[0] if runs else None)
-    by_key = {(r["run"], r["setting"]): r for r in rows}
-    tiles = []
-    for setting, want, label in (
-        ("standard", True, "success"),
-        ("standard", False, "failure"),
-        ("wide", None, "wide pose"),
-    ):
-        row = by_key.get((run, setting))
-        if row is None:
+    spread, rest = [], []  # (label, video, start xy)
+    for row in rows:
+        if row["run"] != run:
             continue
+        seeds = row.get("seeds", [])
+        placements = {p.get("seed"): p for p in row.get("placements", [])}
         for i, ok in enumerate(row.get("video_successes", [])):
-            if want is None or ok == want:
-                video = _video(row, i)
-                if video is not None:
-                    outcome = "" if want is not None else (" (ok)" if ok else " (fail)")
-                    tiles.append((f"{run}: {label}{outcome}", video))
-                    break
-    return tiles
+            video = _video(row, i) if ok else None
+            if video is None:
+                continue
+            seed = seeds[i] if i < len(seeds) else None
+            xy = _start_xy(placements.get(seed))
+            label = f"{run}: {row['setting']}" + (f" (seed {seed})" if seed is not None else "")
+            (spread if xy is not None else rest).append((label, video, xy))
+    chosen = spread[:1]
+    while spread and len(chosen) < min(max_tiles, len(spread)):
+        left = [c for c in spread if not any(c is k for k in chosen)]
+        chosen.append(max(left, key=lambda c: min(np.linalg.norm(c[2] - k[2]) for k in chosen)))
+    chosen += rest[: max_tiles - len(chosen)]
+    return [(label, video) for label, video, _ in chosen]
 
 
 def _read_frames(path: Path, fps: int, tile: int, max_frames: int) -> list[np.ndarray]:
@@ -149,10 +160,15 @@ def _read_frames(path: Path, fps: int, tile: int, max_frames: int) -> list[np.nd
 
 
 def rollout_grid(
-    rows: list[dict], path: Path, fps: int = 10, tile: int = 256, max_seconds: float = 15.0
+    rows: list[dict],
+    path: Path,
+    fps: int = 10,
+    tile: int = 192,
+    max_seconds: float = 15.0,
+    cols: int = 3,
 ) -> Path | None:
-    """Labelled side-by-side GIF of up to three rollouts (see `_tiles`); None if no videos.
-    Shorter clips hold their last frame."""
+    """Labelled GIF grid (up to `cols` per row) of successful rollouts (see `_tiles`); None if
+    no videos. Shorter clips hold their last frame."""
     from PIL import Image, ImageDraw
 
     tiles = _tiles(rows)
@@ -161,15 +177,18 @@ def rollout_grid(
     clips = [_read_frames(v, fps, tile, int(max_seconds * fps)) for _, v in tiles]
     n = max(len(c) for c in clips)
     strip = 16
+    cols = min(cols, len(clips))
+    grid_rows = -(-len(clips) // cols)
     frames = []
     for t in range(n):
-        canvas = Image.new("RGB", (tile * len(clips), tile + strip), "white")
+        canvas = Image.new("RGB", (tile * cols, (tile + strip) * grid_rows), "white")
         draw = ImageDraw.Draw(canvas)
         for k, ((label, _), clip) in enumerate(zip(tiles, clips, strict=True)):
-            canvas.paste(Image.fromarray(clip[min(t, len(clip) - 1)]), (k * tile, strip))
-            draw.text((k * tile + 4, 2), label, fill="black")
+            x, y = (k % cols) * tile, (k // cols) * (tile + strip)
+            canvas.paste(Image.fromarray(clip[min(t, len(clip) - 1)]), (x, y + strip))
+            draw.text((x + 4, y + 2), label, fill="black")
         # PIL's default dithered quantize roughly triples the file size of these renders
-        frames.append(canvas.quantize(colors=128, dither=Image.Dither.NONE))
+        frames.append(canvas.quantize(colors=96, dither=Image.Dither.NONE))
     frames[0].save(path, save_all=True, append_images=frames[1:], duration=1000 // fps, loop=0)
     return path
 
